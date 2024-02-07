@@ -17,9 +17,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install dependencies
+        run: |
+          $(cat Dockerfile | grep "pip install" | cut -f2- -d " ")
+
       - name: Install pylint
         run: |
-          pip install pylint==3.0.3
+          python -m pip install pylint==3.0.3
       
       - name: Lint Python code
         run: |
