@@ -8,7 +8,7 @@ A [Telegram bot](https://core.telegram.org/bots/api) that running in Docker cont
 
 ## Prerequisites
 - Docker engine on x86_64 host
-- A [Telegram bot](https://core.telegram.org/bots#6-botfather) and its token (see [tutorial](https://core.telegram.org/bots/tutorial#obtain-your-bot-token)
+- A [Telegram bot](https://core.telegram.org/bots#6-botfather) and its token (see [tutorial](https://core.telegram.org/bots/tutorial#obtain-your-bot-token))
 
 ## Configuration
 Just provide `BOT_TOKEN` in the `.env` file, you may use `.env.example` as example. Alnetratively you may provide `BOT_TOKEN` as enviromental variable.
@@ -52,8 +52,3 @@ This is a personal project and is not affiliated with Monobank/Universal Bank an
 
 ## License
 Files included in this repository is avaliable under terms of [MIT license](LICENSE). external dependency, such as [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) or [requests](https://github.com/psf/requests) is avaliable under their own licenses.
-
-
-
-
-ghcr.io/yurnov/xratebot:latest
