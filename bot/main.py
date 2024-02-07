@@ -66,7 +66,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pln_rate = next(item for item in data if item['currencyCodeA'] == 985 and item['currencyCodeB'] == 980)['rateCross']
 
         # Sending the exchange rates to the user
-        await update.message.reply_text(f'Buy rates:\nUSD Exchange Rate: {usd_rate}\nEUR Exchange Rate: {eur_rate}\n\nSell rates:\nUSD Exchange Rate: {usd_rate_sell}\nEUR Exchange Rate: {eur_rate_sell}\n\nPLN Exchange Rate: {pln_rate}')    
+        await update.message.reply_text(f'🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}')    
 
     except Exception:
         await update.message.reply_text('Error parsing exchange rates from Monobank API response')
