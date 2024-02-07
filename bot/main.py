@@ -25,14 +25,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}, I'm a exchange rate bot, use /rate to gat a rate!",
+        rf"Hi {user.mention_html()}, I'm a exchange rate bot, I will help to to know actual exchange rate<br/>Please use /rate to get information!",
         reply_markup=ForceReply(selective=True),
     )
 
 # pylint: disable=unused-argument
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
-    await update.message.reply_text("use /rate to get a rate! Data is fetched from Monobank API and upadted once per 5 minutes.")
+    await update.message.reply_text("Use /rate to get a rate!\n Base currency is 🇺🇦 Ukrainian Hryvnia (UAH ₴)\n\nPowered by Monobank API.")
 
 # pylint: disable=unused-argument
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -66,7 +66,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pln_rate = next(item for item in data if item['currencyCodeA'] == 985 and item['currencyCodeB'] == 980)['rateCross']
 
         # Sending the exchange rates to the user
-        await update.message.reply_text(f'🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}')    
+        await update.message.reply_text(f'🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}')
 
     except Exception:
         await update.message.reply_text('Error parsing exchange rates from Monobank API response')

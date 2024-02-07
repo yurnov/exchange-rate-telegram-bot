@@ -34,7 +34,7 @@ Run container
 ```shell
 docker run --rm -d --env-file .env exchange-rate-telegram-bot
 ```
-#### Ready-to-use Docker images
+### Ready-to-use Docker images
 You can also use the Docker image from GitHub Container Registry:
 ```shell
 docker pull ghcr.io/yurnov/xratebot:latest
@@ -46,6 +46,8 @@ Alternatively, you may use enviroment varaible:
 docker pull ghcr.io/yurnov/xratebot:latest
 docker run --rm -d -e BOT_TOKEN="1111111111:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" ghcr.io/yurnov/xratebot:latest
 ```
+### Ready-to-use Telegram Bot
+Start telegram conversation with [mono_rate_bot](https://t.me/mono_rate_bot) 
 
 ## Disclaimer
 This is a personal project and is not affiliated with Monobank/Universal Bank and Telegram Messenger Inc.
