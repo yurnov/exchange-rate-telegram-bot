@@ -25,7 +25,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}, I'm a exchange rate bot, I will help to to know actual exchange rate<br/>Please use /rate to get information!",
+        rf"Hi {user.mention_html()}, "
+        "I'm a exchange rate bot, I will help to to know actual exchange rate of USD, EUR and PLN in UAH. "
+        "Please use /rate to get information!",
         reply_markup=ForceReply(selective=True),
     )
 
