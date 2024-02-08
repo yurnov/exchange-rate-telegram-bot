@@ -49,14 +49,8 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         data = response.json()
 
     except Exception as e:
-        await update.message.reply_text(f'Error fetching exchange rates: {str(e)}')
+        await update.message.reply_text(f'Error fetching exchange rates: {str(e)}, please try again later.')
         logger.error(f'Error fetching exchange rates: {str(e)}')
-
-    usd_rate = 0
-    usd_rate_sell = 0
-    eur_rate = 0
-    eur_rate_sell = 0
-    pln_rate = 0
     
     # pylint: disable=broad-except
     try:
@@ -85,7 +79,14 @@ def main() -> None:
         return
     
     logger.info("BOT_TOKEN is provided. Starting bot...")
-    
+
+    # Initialize empty exchange rates
+    usd_rate = 0
+    usd_rate_sell = 0
+    eur_rate = 0
+    eur_rate_sell = 0
+    pln_rate = 0
+
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
@@ -93,8 +94,6 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("rate", rate))
-
-    # on non command i.e message - echo the message on Telegram
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help_command))
 
     # Run the bot until the user presses Ctrl-C
