@@ -4,6 +4,9 @@
 import logging
 import requests
 import os
+import schedule
+import time
+import threading
 from dotenv import load_dotenv
 
 from telegram import ForceReply, Update
@@ -19,6 +22,26 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+def get_exchange_rates():
+    logger.info("Fetching exchange rates from Monobank API")
+    
+    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate
+    # pylint: disable=broad-except
+    try:
+        # Fetching exchange rates from Monobank API
+        response = requests.get(MONOBANK_API_URL, timeout=10)
+        data = response.json()
+        usd_rate = next(item for item in data if item['currencyCodeA'] == 840 and item['currencyCodeB'] == 980)['rateBuy']
+        usd_rate_sell = next(item for item in data if item['currencyCodeA'] == 840 and item['currencyCodeB'] == 980)['rateSell']
+        eur_rate = next(item for item in data if item['currencyCodeA'] == 978 and item['currencyCodeB'] == 980)['rateBuy']
+        eur_rate_sell = next(item for item in data if item['currencyCodeA'] == 978 and item['currencyCodeB'] == 980)['rateSell']
+        pln_rate = next(item for item in data if item['currencyCodeA'] == 985 and item['currencyCodeB'] == 980)['rateCross']
+
+        logger.info(f'USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}')
+        
+    except Exception as e:
+        logger.error(f'Error fetching exchange rates: {str(e)}')
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,33 +63,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     logger.info(f'User {update.effective_user.id} requested exchange rates.')
-    logger.info("Fetching exchange rates from Monobank API")
     
-    # pylint: disable=broad-except
     try:
-        # Fetching exchange rates from Monobank API
-        response = requests.get(MONOBANK_API_URL, timeout=10)
-        data = response.json()
-
-    except Exception as e:
-        await update.message.reply_text(f'Error fetching exchange rates: {str(e)}, please try again later.')
-        logger.error(f'Error fetching exchange rates: {str(e)}')
-    
-    # pylint: disable=broad-except
-    try:
-        # Extracting exchange rates from the JSON response
-        usd_rate = next(item for item in data if item['currencyCodeA'] == 840 and item['currencyCodeB'] == 980)['rateBuy']
-        usd_rate_sell = next(item for item in data if item['currencyCodeA'] == 840 and item['currencyCodeB'] == 980)['rateSell']
-        eur_rate = next(item for item in data if item['currencyCodeA'] == 978 and item['currencyCodeB'] == 980)['rateBuy']
-        eur_rate_sell = next(item for item in data if item['currencyCodeA'] == 978 and item['currencyCodeB'] == 980)['rateSell']
-        pln_rate = next(item for item in data if item['currencyCodeA'] == 985 and item['currencyCodeB'] == 980)['rateCross']
-
-        # Sending the exchange rates to the user
         await update.message.reply_text(f'🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}')
+        logger.info(f'Exchange rates sent to user {update.effective_user.id}')
+        
+    except Exception as e:
+        await update.message.reply_text(f'Error heppened, please try again later.')
+        logger.error(f'Error fetching exchange rates: {str(e)}')
 
-    except Exception:
-        await update.message.reply_text('Error parsing exchange rates from Monobank API response')
-        logger.error('Error parsing exchange rates from Monobank API response')
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 def main() -> None:
     # Load environment variables
@@ -80,12 +89,12 @@ def main() -> None:
     
     logger.info("BOT_TOKEN is provided. Starting bot...")
 
-    # Initialize empty exchange rates
-    usd_rate = 0
-    usd_rate_sell = 0
-    eur_rate = 0
-    eur_rate_sell = 0
-    pln_rate = 0
+    # Get rate once and schedule the job to fetch exchange rates every 1 minute
+    logger.info("Scheduling exchange rates fetching every 5 minutes")
+    schedule.every(5).minutes.do(get_exchange_rates)
+    schedule.run_all()
+    thread = threading.Thread(target=run_schedule)
+    thread.start()
 
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
