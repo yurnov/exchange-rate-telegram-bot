@@ -59,3 +59,12 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' }}
           no-cache: true
           tags: ghcr.io/yurnov/xratebot:latest, ghcr.io/yurnov/xratebot:${{ github.sha }}
+
+      - name: Build Docker image for development version and push to registry
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          # push to registry when merge to main
+          push: ${{ github.ref == 'refs/heads/development' }}
+          no-cache: true
+          tags: ghcr.io/yurnov/xratebot:dev
