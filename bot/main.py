@@ -14,6 +14,13 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 MONOBANK_API_URL = "https://api.monobank.ua/bank/currency"
 
+# Initialize exchange rates
+usd_rate = 0
+usd_rate_sell = 0
+eur_rate = 0
+eur_rate_sell = 0
+pln_rate = 0
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
