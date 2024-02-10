@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
     
+    # pylint: disable=global-statement
     global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate
     # pylint: disable=broad-except
     try:
@@ -74,9 +75,10 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await update.message.reply_text(f'🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}')
         logger.info(f'Exchange rates sent to user {update.effective_user.id}')
-        
+
+    # pylint: disable=broad-except    
     except Exception as e:
-        await update.message.reply_text(f'Error heppened, please try again later.')
+        await update.message.reply_text('Error heppened, please try again later.')
         logger.error(f'Error fetching exchange rates: {str(e)}')
 
 def run_schedule():
