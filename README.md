@@ -13,6 +13,8 @@ A [Telegram bot](https://core.telegram.org/bots/api) that running in Docker cont
 ## Configuration
 Just provide `BOT_TOKEN` in the `.env` file, you may use `.env.example` as example. Alnetratively you may provide `BOT_TOKEN` as enviromental variable.
 
+Optionally you can provide a `PULL_INTERVAL` in seconds to update rates every defined amount of seconds. Default value is 300. Value lower that 20 is not accepted, and lower that 30 is not recommended as it may lead throtling from Monobank side with answers like `{'errorDescription': 'Too many requests'}` 
+
 ## Running
 ### Build own Docker image
 

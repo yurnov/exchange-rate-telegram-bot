@@ -90,17 +90,35 @@ def main() -> None:
     # Load environment variables
     load_dotenv()
     TOKEN = os.getenv("BOT_TOKEN")
+    PULL_INTERVAL = os.getenv("PULL_INTERVAL")
+
+    if PULL_INTERVAL is None:
+        logger.info("PULL_INTERVAL is not defined, using default value 300")
+        PULL_INTERVAL = 300
+    
+    try:
+        PULL_INTERVAL = int(PULL_INTERVAL)
+    except ValueError:
+        logger.error("PULL_INTERVAL must be an integer")
+        logger.error("Using default value 300")
+        PULL_INTERVAL = 300
+    
+    if not 15 <= PULL_INTERVAL <= 3600:
+        logger.error("PULL_INTERVAL must be an integer between 15 and 3600")
+        logger.error("Using default value 300")
+        PULL_INTERVAL = 300
 
     # Ensure the token is set
     if TOKEN is None:
         logger.error("BOT_TOKEN is required")
         return
     
+    logger.info(f"PULL_INTERVAL is set to {PULL_INTERVAL}")
     logger.info("BOT_TOKEN is provided. Starting bot...")
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
-    logger.info("Scheduling exchange rates fetching every 5 minutes")
-    schedule.every(5).minutes.do(get_exchange_rates)
+    logger.info(f'Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.')
+    schedule.every(PULL_INTERVAL).seconds.do(get_exchange_rates)
     schedule.run_all()
     thread = threading.Thread(target=run_schedule)
     thread.start()
