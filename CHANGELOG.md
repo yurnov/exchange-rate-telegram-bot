@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2
+## 0.2.0
 
 Instead of individual API call for each `/rate` bot command rates pulled in configurable interval
 
