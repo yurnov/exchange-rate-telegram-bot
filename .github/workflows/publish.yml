@@ -12,6 +12,10 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
+      - name: Get the version
+        id: get_version
+        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
@@ -51,15 +55,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image and push to registry
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          # push to registry when merge to main
-          push: ${{ github.ref == 'refs/heads/main' }}
-          no-cache: true
-          tags: ghcr.io/yurnov/xratebot:latest, ghcr.io/yurnov/xratebot:${{ github.sha }}
-
       - name: Build Docker image for development version and push to registry
         uses: docker/build-push-action@v3
         with:
@@ -68,3 +63,15 @@ jobs:
           push: ${{ github.ref == 'refs/heads/development' }}
           no-cache: true
           tags: ghcr.io/yurnov/xratebot:dev
+
+      - name: Build Docker image and push to registry
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          # push to registry when merge to main
+          push: ${{ github.ref == 'refs/heads/main' }}
+          no-cache: true
+          tags: |
+            ghcr.io/yurnov/xratebot:latest
+            ghcr.io/yurnov/xratebot:${{ steps.get_version.outputs.VERSION }}
+            ghcr.io/yurnov/xratebot:${{ github.sha }}
