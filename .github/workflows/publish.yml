@@ -1,6 +1,9 @@
 name: Publish Docker image to GitHub Container Registry
-on: [push]
-
+on:
+  push:
+    branches:
+      - main
+      - development
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -11,10 +14,8 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-
-      - name: Get the version
-        id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+        with:
+          fetch-tags: True
 
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -59,7 +60,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          # push to registry when merge to main
+          # push to registry when merge to development
           push: ${{ github.ref == 'refs/heads/development' }}
           no-cache: true
           tags: ghcr.io/yurnov/xratebot:dev
@@ -73,5 +74,5 @@ jobs:
           no-cache: true
           tags: |
             ghcr.io/yurnov/xratebot:latest
-            ghcr.io/yurnov/xratebot:${{ steps.get_version.outputs.VERSION }}
             ghcr.io/yurnov/xratebot:${{ github.sha }}
+  
