@@ -2,7 +2,7 @@
 ![python-version](https://img.shields.io/badge/python-3.12-blue.svg)
 [![python-telegram-bot](https://img.shields.io/badge/Python-Telegram_bot-blue.svg)](https://github.com/python-telegram-bot/python-telegram-bot)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Publish image](https://github.com/yurnov/exchange-rate-telegram-bot/actions/workflows/publish.yml/badge.svg)](https://github.com/yurnov/exchange-rate-telegram-bot/actions/workflows/publish.yml)
+[![Publish image](https://github.com/yurnov/exchange-rate-telegram-bot/actions/workflows/release.yml/badge.svg)](https://github.com/yurnov/exchange-rate-telegram-bot/actions/workflows/release.yml)
 
 A [Telegram bot](https://core.telegram.org/bots/api) that running in Docker container with minimal config and gather exchange rate for few currenies from [Monobank API](https://api.monobank.ua/).
 

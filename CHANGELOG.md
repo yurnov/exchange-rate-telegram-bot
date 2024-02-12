@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.2.0
+## v0.2.1
+
+Code is same as `v0.2.1`, just fix in README.md
+
+## v0.2.0
 
 Instead of individual API call for each `/rate` bot command rates pulled in configurable interval
 
