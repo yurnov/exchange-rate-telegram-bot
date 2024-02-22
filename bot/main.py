@@ -55,12 +55,15 @@ def get_exchange_rates():
     # Log exchange rates to CSV file
     # format of CSV file: Date, Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
     if LOG_RATE:
-        try: 
-            with open('exchange_rates.csv', 'a') as file:
-                file.write(f'{time.strftime("%Y-%m-%d")},{time.strftime("%H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
-            logger.info('Exchange rates written to exchange_rates.csv')
-        except Exception as e:
-            logger.error(f'Error writing to exchange_rates.csv: {str(e)}')
+        if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
+            try: 
+                with open('exchange_rates.csv', 'a') as file:
+                    file.write(f'{time.strftime("%Y-%m-%d")},{time.strftime("%H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
+                logger.info('Exchange rates written to exchange_rates.csv')
+            except Exception as e:
+                logger.error(f'Error writing to exchange_rates.csv: {str(e)}')
+        else:
+            logger.error('Exchange rates are not fetched, not writing to exchange_rates.csv')
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
