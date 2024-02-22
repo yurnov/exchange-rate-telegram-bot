@@ -20,6 +20,7 @@ usd_rate_sell = 0
 eur_rate = 0
 eur_rate_sell = 0
 pln_rate = 0
+LOG_RATE = False
 
 # Enable logging
 logging.basicConfig(
@@ -50,6 +51,16 @@ def get_exchange_rates():
         
     except Exception as e:
         logger.error(f'Error fetching exchange rates: {str(e)}')
+    
+    # Log exchange rates to CSV file
+    # format of CSV file: Date, Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
+    if LOG_RATE:
+        try: 
+            with open('exchange_rates.csv', 'a') as file:
+                file.write(f'{time.strftime("%Y-%m-%d")},{time.strftime("%H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
+            logger.info('Exchange rates written to exchange_rates.csv')
+        except Exception as e:
+            logger.error(f'Error writing to exchange_rates.csv: {str(e)}')
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -87,10 +98,14 @@ def run_schedule():
         time.sleep(1)
 
 def main() -> None:
+
+    global LOG_RATE
+
     # Load environment variables
     load_dotenv()
     TOKEN = os.getenv("BOT_TOKEN")
     PULL_INTERVAL = os.getenv("PULL_INTERVAL")
+    LOG_RATE = os.getenv("LOG_RATE")
 
     if PULL_INTERVAL is None:
         logger.info("PULL_INTERVAL is not defined, using default value 300")
@@ -112,9 +127,18 @@ def main() -> None:
     if TOKEN is None:
         logger.error("BOT_TOKEN is required")
         return
-    
+
     logger.info(f"PULL_INTERVAL is set to {PULL_INTERVAL}")
     logger.info("BOT_TOKEN is provided. Starting bot...")
+
+    # Check if logging exchange rates to CSV is enabled
+    if LOG_RATE is None or LOG_RATE.lower() not in ['true', '1', 'yes']:
+        LOG_RATE = False
+        logging.info('LOG_RATE is False or not defined, CSV logging is disabled.')
+    else:
+        LOG_RATE = True
+        logger.info(f'LOG_RATE is set to {LOG_RATE}')
+        logger.info("Format of CSV file: Date, Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate")
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
     logger.info(f'Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.')
