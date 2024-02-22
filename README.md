@@ -13,7 +13,9 @@ A [Telegram bot](https://core.telegram.org/bots/api) that running in Docker cont
 ## Configuration
 Just provide `BOT_TOKEN` in the `.env` file, you may use `.env.example` as example. Alnetratively you may provide `BOT_TOKEN` as enviromental variable.
 
-Optionally you can provide a `PULL_INTERVAL` in seconds to update rates every defined amount of seconds. Default value is 300. Value lower that 20 is not accepted, and lower that 30 is not recommended as it may lead throtling from Monobank side with answers like `{'errorDescription': 'Too many requests'}` 
+Optionally you can provide a `PULL_INTERVAL` in seconds to update rates every defined amount of seconds. Default value is 300. Value lower that 20 is not accepted, and lower that 30 is not recommended as it may lead throtling from Monobank side with answers like `{'errorDescription': 'Too many requests'}`
+
+Optionally bot can log exchange rates into CSV file `exchange_rates.csv`. Set `LOG_RATE` to `True` to enable logging. 
 
 ## Running
 ### Build own Docker image
@@ -48,6 +50,13 @@ Alternatively, you may use enviroment varaible:
 docker pull ghcr.io/yurnov/xratebot:latest
 docker run --rm -d -e BOT_TOKEN="1111111111:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" ghcr.io/yurnov/xratebot:latest
 ```
+
+Do not forget to bind (mount) a CSV file in case when exchange rates loggin is enabled with `LOG_RATE`:
+```shell
+touch exchange_rates.csv && \
+docker run --rm -it --env-file .env -v ./exchange_rates.csv:/bot/exchange_rates.csv ghcr.io/yurnov/xratebot:latest
+```
+
 ### Ready-to-use Telegram Bot
 Start telegram conversation with [mono_rate_bot](https://t.me/mono_rate_bot) 
 

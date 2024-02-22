@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.0
+
+Feature: optinal logging exchange rates to CSV file
+
 ## v0.2.1
 
 Code is same as `v0.2.1`, just fix in README.md
