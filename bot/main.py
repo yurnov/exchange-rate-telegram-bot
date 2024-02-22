@@ -57,7 +57,7 @@ def get_exchange_rates():
     if LOG_RATE:
         if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
             try: 
-                with open('exchange_rates.csv', 'a') as file:
+                with open('exchange_rates.csv', 'a', encoding='utf-8') as file:
                     file.write(f'{time.strftime("%Y-%m-%d")},{time.strftime("%H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
                 logger.info('Exchange rates written to exchange_rates.csv')
             except Exception as e:
@@ -102,6 +102,7 @@ def run_schedule():
 
 def main() -> None:
 
+    # pylint: disable=global-statement
     global LOG_RATE
 
     # Load environment variables
