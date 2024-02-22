@@ -20,8 +20,9 @@ usd_rate_sell = 0
 eur_rate = 0
 eur_rate_sell = 0
 pln_rate = 0
+LOG_RATE = False
 
-# Enable logging
+# Enable initial logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -50,6 +51,19 @@ def get_exchange_rates():
         
     except Exception as e:
         logger.error(f'Error fetching exchange rates: {str(e)}')
+    
+    # Log exchange rates to CSV file
+    # format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
+    if LOG_RATE:
+        if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
+            try: 
+                with open('exchange_rates.csv', 'a', encoding='utf-8') as file:
+                    file.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
+                logger.info('Exchange rates written to exchange_rates.csv')
+            except Exception as e:
+                logger.error(f'Error writing to exchange_rates.csv: {str(e)}')
+        else:
+            logger.error('Exchange rates are not fetched, not writing to exchange_rates.csv')
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -87,10 +101,16 @@ def run_schedule():
         time.sleep(1)
 
 def main() -> None:
+
+    # pylint: disable=global-statement
+    global LOG_RATE
+
     # Load environment variables
     load_dotenv()
     TOKEN = os.getenv("BOT_TOKEN")
     PULL_INTERVAL = os.getenv("PULL_INTERVAL")
+    LOG_RATE = os.getenv("LOG_RATE")
+    LOG_LEVEL = os.getenv("LOG_LEVEL")
 
     if PULL_INTERVAL is None:
         logger.info("PULL_INTERVAL is not defined, using default value 300")
@@ -112,9 +132,18 @@ def main() -> None:
     if TOKEN is None:
         logger.error("BOT_TOKEN is required")
         return
-    
+
     logger.info(f"PULL_INTERVAL is set to {PULL_INTERVAL}")
     logger.info("BOT_TOKEN is provided. Starting bot...")
+
+    # Check if logging exchange rates to CSV is enabled
+    if LOG_RATE is None or LOG_RATE.lower() not in ['true', '1', 'yes']:
+        LOG_RATE = False
+        logging.info('LOG_RATE is False or not defined, CSV logging is disabled.')
+    else:
+        LOG_RATE = True
+        logger.info(f'LOG_RATE is set to {LOG_RATE}')
+        logger.info("Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate")
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
     logger.info(f'Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.')
@@ -123,8 +152,17 @@ def main() -> None:
     thread = threading.Thread(target=run_schedule)
     thread.start()
 
+    if LOG_LEVEL is None or LOG_LEVEL.lower() not in ['debug', 'info', 'warning', 'error', 'critical']:
+        LOG_LEVEL = 'info'
+        logger.info('LOG_LEVEL is not defined or invalid, using default value info')
+
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
+
+    # Set runtime logging level
+    if LOG_LEVEL.lower() != 'info':
+        logger.info(f'Switching LOG_LEVEL to user-defined value {LOG_LEVEL.upper()}')
+    logger.setLevel(LOG_LEVEL.upper())
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start))

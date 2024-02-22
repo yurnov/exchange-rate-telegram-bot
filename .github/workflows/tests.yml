@@ -2,7 +2,8 @@ name: Run tests and build Docker image for development version
 on:
   push:
     branches:
-      - '!master'
+      - development
+
 jobs:
   publish:
     runs-on: ubuntu-latest
