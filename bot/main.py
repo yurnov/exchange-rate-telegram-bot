@@ -24,7 +24,6 @@ LOG_RATE = False
 
 # Enable initial logging
 logging.basicConfig(
-    # format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 # set higher logging level for httpx to avoid all GET and POST requests being logged
@@ -54,12 +53,12 @@ def get_exchange_rates():
         logger.error(f'Error fetching exchange rates: {str(e)}')
     
     # Log exchange rates to CSV file
-    # format of CSV file: Date, Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
+    # format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
     if LOG_RATE:
         if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
             try: 
                 with open('exchange_rates.csv', 'a', encoding='utf-8') as file:
-                    file.write(f'{time.strftime("%Y-%m-%d")},{time.strftime("%H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
+                    file.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
                 logger.info('Exchange rates written to exchange_rates.csv')
             except Exception as e:
                 logger.error(f'Error writing to exchange_rates.csv: {str(e)}')
@@ -144,7 +143,7 @@ def main() -> None:
     else:
         LOG_RATE = True
         logger.info(f'LOG_RATE is set to {LOG_RATE}')
-        logger.info("Format of CSV file: Date, Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate")
+        logger.info("Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate")
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
     logger.info(f'Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.')
