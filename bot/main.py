@@ -22,8 +22,9 @@ eur_rate_sell = 0
 pln_rate = 0
 LOG_RATE = False
 
-# Enable logging
+# Enable initial logging
 logging.basicConfig(
+    # format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 # set higher logging level for httpx to avoid all GET and POST requests being logged
@@ -110,6 +111,7 @@ def main() -> None:
     TOKEN = os.getenv("BOT_TOKEN")
     PULL_INTERVAL = os.getenv("PULL_INTERVAL")
     LOG_RATE = os.getenv("LOG_RATE")
+    LOG_LEVEL = os.getenv("LOG_LEVEL")
 
     if PULL_INTERVAL is None:
         logger.info("PULL_INTERVAL is not defined, using default value 300")
@@ -151,8 +153,17 @@ def main() -> None:
     thread = threading.Thread(target=run_schedule)
     thread.start()
 
+    if LOG_LEVEL is None or LOG_LEVEL.lower() not in ['debug', 'info', 'warning', 'error', 'critical']:
+        LOG_LEVEL = 'info'
+        logger.info('LOG_LEVEL is not defined or invalid, using default value info')
+
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
+
+    # Set runtime logging level
+    if LOG_LEVEL.lower() != 'info':
+        logger.info(f'Switching LOG_LEVEL to user-defined value {LOG_LEVEL.upper()}')
+    logger.setLevel(LOG_LEVEL.upper())
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start))

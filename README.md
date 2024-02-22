@@ -15,7 +15,9 @@ Just provide `BOT_TOKEN` in the `.env` file, you may use `.env.example` as examp
 
 Optionally you can provide a `PULL_INTERVAL` in seconds to update rates every defined amount of seconds. Default value is 300. Value lower that 20 is not accepted, and lower that 30 is not recommended as it may lead throtling from Monobank side with answers like `{'errorDescription': 'Too many requests'}`
 
-Optionally bot can log exchange rates into CSV file `exchange_rates.csv`. Set `LOG_RATE` to `True` to enable logging. 
+Optionally bot can log exchange rates into CSV file `exchange_rates.csv`. Set `LOG_RATE` to `True` to enable logging.
+
+Default log level in INFO, you can override it with `LOG_LEVEL` varaible.
 
 ## Running
 ### Build own Docker image

@@ -2,11 +2,12 @@
 
 ## v0.3.0
 
-Feature: [optinal logging exchange rates to CSV file](https://github.com/yurnov/exchange-rate-telegram-bot/issues/4)
+[Optinal logging exchange rates to CSV file](https://github.com/yurnov/exchange-rate-telegram-bot/issues/4)
+Log level for application log is configurable
 
 ## v0.2.1
 
-Code is same as `v0.2.1`, just fix in README.md
+Code is same as `v0.2.0`, just fix in README.md
 
 ## v0.2.0
 
