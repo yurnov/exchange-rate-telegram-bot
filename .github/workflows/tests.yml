@@ -2,7 +2,7 @@ name: Run tests and build Docker image for development version
 on:
   push:
     branches:
-      - development
+      - 'dev*'
 
 jobs:
   publish:
@@ -41,6 +41,13 @@ jobs:
           failure-threshold: error
           ignore: DL3008,SC3009,DL3013
 
+      - name: Lint Dockerfile for chart-builder with hadolint
+        uses: hadolint/hadolint-action@v2.1.0
+        with:
+          dockerfile: chart-builder/Dockerfile
+          failure-threshold: error
+          ignore: DL3008,SC3009,DL3013
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -61,9 +68,18 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          # push to registry when merge to development
-          push: ${{ github.ref == 'refs/heads/development' }}
+          # push to registry when merge to branch starting with dev
+          push: ${{ startsWith(github.ref, 'refs/heads/dev') }}
           no-cache: true
           tags: ghcr.io/yurnov/xratebot:dev
+
+      - name: Build Docker image for chart-builder development version and push to registry
+        uses: docker/build-push-action@v3
+        with:
+          context: ./chart-builder
+          # push to registry when merge to branch starting with dev
+          push: ${{ startsWith(github.ref, 'refs/heads/dev') }}
+          no-cache: true
+          tags: ghcr.io/yurnov/xratebot:dev-image-builder
 
   

@@ -67,8 +67,13 @@ Start telegram conversation with [mono_rate_bot](https://t.me/mono_rate_bot)
 A CSV log produced by the bot (with `LOG_RATE` enabeled) can be used for creathing a chart in PNG format. To do so, please build a image of chart builder and run container:
 
 ```shell
-docker build chart-builder/ -t ghcr.io/yurnov/xratebot:image
-docker run --rm -it -v ./chart-builder/data:/data -v ./exchange_rates.csv:/data/exchange_rates.csv:ro ghcr.io/yurnov/xratebot:image
+docker build chart-builder/ -t xratebot:dev-image-builder
+docker run --rm -it -v ./chart-builder/data:/data -v ./exchange_rates.csv:/data/exchange_rates.csv:ro xratebot:dev-image-builder
+```
+
+or just run ready-to-use Docker image:
+```shell
+docker run --rm -it -v ./chart-builder/data:/data -v ./exchange_rates.csv:/data/exchange_rates.csv:ro ghcr.io/yurnov/xratebot:dev-image-builder
 ```
 
 ## Disclaimer
