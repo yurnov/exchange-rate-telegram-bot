@@ -18,7 +18,3 @@ build/
 *.code-workspace
 .history/
 .settings/
-*.log
-*.sublime-workspace
-*.sublime-project
-# END: abpxx6d04wxr

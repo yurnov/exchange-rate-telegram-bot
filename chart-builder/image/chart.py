@@ -1,6 +1,7 @@
 import csv
-import matplotlib.pyplot as plt
+import datetime
 import logging
+import matplotlib.pyplot as plt
 import numpy as np
 
 # Enable logging
@@ -17,6 +18,7 @@ def read_csv(file_path):
 
         for row in reader:
             date, buy_rate, sell_rate, buy_rate_eur, sell_rate_eur, pln_exchange_rate = row
+            date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')
             data['dates'].append(date)
             data['buy_rate'].append(float(buy_rate))
             data['sell_rate'].append(float(sell_rate))
