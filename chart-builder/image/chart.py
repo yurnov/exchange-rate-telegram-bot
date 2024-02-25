@@ -37,7 +37,7 @@ def read_csv(file_path, limit=1000000):
 
     return data
 
-def downsample_data(data):
+def downsample_data(data, buy_rate, sell_rate, buy_rate_eur, sell_rate_eur):
     dates = data['dates']
     pln_exchange_rate = data['pln_exchange_rate']
     num_points = len(dates)
@@ -52,12 +52,16 @@ def downsample_data(data):
         factor = 75
     else:
         factor = max(100, num_points // 250)
-    
+
     logging.info(f'Downsampling data with factor: {factor}')
 
     num_aggregated_points = num_points // factor
 
     aggregated_dates = []
+    aggregated_buy_rate = []
+    aggregated_sell_rate = []
+    aggregated_buy_rate_eur = []
+    aggregated_sell_rate_eur = []
     aggregated_pln_exchange_rate = []
 
     for i in range(num_aggregated_points):
@@ -65,13 +69,62 @@ def downsample_data(data):
         end_index = start_index + factor
 
         aggregated_dates.append(dates[start_index])
+        aggregated_buy_rate.append(np.mean(buy_rate[start_index:end_index]))
+        aggregated_sell_rate.append(np.mean(sell_rate[start_index:end_index]))
+        aggregated_buy_rate_eur.append(np.mean(buy_rate_eur[start_index:end_index]))
+        aggregated_sell_rate_eur.append(np.mean(sell_rate_eur[start_index:end_index]))
         aggregated_pln_exchange_rate.append(np.mean(pln_exchange_rate[start_index:end_index]))
+        
+        logging.info(f'amount of points: {len(aggregated_dates)}')
+        logging.info(f'amount of points: {len(aggregated_buy_rate)}')
 
-    return {'dates': aggregated_dates, 'pln_exchange_rate': aggregated_pln_exchange_rate}
+    return {'dates': aggregated_dates, 'buy_rate': aggregated_buy_rate, 'sell_rate': aggregated_sell_rate,
+            'buy_rate_eur':aggregated_buy_rate_eur, 'sell_rate_eur': aggregated_sell_rate_eur, 
+            'pln_exchange_rate': aggregated_pln_exchange_rate}
 
-def create_chart(data, output_file):
-    downsampled_data = downsample_data(data)
+def create_chart(data, output_file_usd, output_file_eur, output_file_pln):
+    
+    downsampled_data = downsample_data(data, data['buy_rate'], data['sell_rate'], data['buy_rate_eur'], data['sell_rate_eur'])
+    logging.info(f'Downsampling data: {len(data["dates"])} points to {len(downsampled_data["dates"])} points.')
+    # Create a plot for USD exchange rates
+    logging.info('Creating a plot for USD exchange rates over time.')
 
+    plt.figure(figsize=(16, 9))
+    plt.plot(downsampled_data['dates'], downsampled_data['buy_rate'], label='USD/UAH Buy Rate', marker='o')
+    plt.plot(downsampled_data['dates'], downsampled_data['sell_rate'], label='USD/UAH Sell Rate', marker='o')
+
+    # Customize chart
+    plt.title('USD Exchange Rates Over Time')
+    plt.xlabel('Time')
+    plt.ylabel('USD Exchange Rate')
+    plt.legend()
+    plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
+
+    # Save the chart as an image file
+    plt.tight_layout()
+    plt.savefig(output_file_usd)
+    plt.close()
+
+    # Create a plot for EUR exchange rates
+    logging.info('Creating a plot for EUR exchange rates over time.')
+
+    plt.figure(figsize=(16, 9))
+    plt.plot(downsampled_data['dates'], downsampled_data['buy_rate_eur'], label='EUR/UAH Buy rate', marker='o')
+    plt.plot(downsampled_data['dates'], downsampled_data['sell_rate_eur'], label='EUR/UAH Sell over time', marker='o')
+
+    # Customize chart
+    plt.title('EUR Exchange Rates Over Time')
+    plt.xlabel('Time')
+    plt.ylabel('EUR Exchange Rate')
+    plt.legend()
+    plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
+
+    # Save the chart as an image file
+    plt.tight_layout()
+    plt.savefig(output_file_eur)
+    plt.close()
+
+    # Create a plot for PLN exchange rates
     logging.info('Creating a plot for PLN exchange rates over time.')
 
     plt.figure(figsize=(16, 9))
@@ -86,13 +139,15 @@ def create_chart(data, output_file):
 
     # Save the chart as an image file
     plt.tight_layout()
-    plt.savefig(output_file)
+    plt.savefig(output_file_pln)
     plt.close()
 
 if __name__ == "__main__":
     # Update the file path with your CSV file
     csv_file_path = '../data/exchange_rates.csv'
-    output_file = '../data/chart.png'
+    output_file_usd = '../data/usd.png'
+    output_file_eur = '../data/eur.png'
+    output_file_pln = '../data/pln.png'
 
     # Read data from CSV
     try:
@@ -103,8 +158,8 @@ if __name__ == "__main__":
     
     # Save the chart as an image file (change 'chart.png' to your desired filename)
     try:
-        create_chart(exchange_data, output_file)
-        logging.info(f'Chart created successfully: {output_file}')
+        create_chart(exchange_data, output_file_usd, output_file_eur, output_file_pln)
+        logging.info(f'Chart created successfully: {output_file_usd}, {output_file_eur}, {output_file_pln}')
         exit(0)
     except Exception as e:
         logging.error(f'Error creating chart: {str(e)}')
