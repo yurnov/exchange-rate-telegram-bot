@@ -9,14 +9,23 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-def read_csv(file_path):
+def read_csv(file_path, limit=1000000):
     data = {'dates': [], 'buy_rate': [], 'sell_rate': [], 'buy_rate_eur': [], 'sell_rate_eur': [], 'pln_exchange_rate': []}
 
+    logging.info(f'Reading CSV file: {file_path}')
     with open(file_path, newline='') as csvfile:
         reader = csv.reader(csvfile)
         next(reader)  # Skip header if present
 
-        for row in reader:
+        lines = list(reader)
+        num_lines = len(lines)
+        logging.info(f'Number of lines in CSV file: {num_lines}')
+
+        if num_lines > limit:
+            lines = lines[-limit:]
+            logging.info(f'Limiting data to last {limit} entries')
+
+        for row in lines:
             date, buy_rate, sell_rate, buy_rate_eur, sell_rate_eur, pln_exchange_rate = row
             date = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M')
             data['dates'].append(date)
@@ -28,10 +37,24 @@ def read_csv(file_path):
 
     return data
 
-def downsample_data(data, factor):
+def downsample_data(data):
     dates = data['dates']
     pln_exchange_rate = data['pln_exchange_rate']
     num_points = len(dates)
+
+    if num_points <= 100:
+        factor = 1
+    elif 100 < num_points <= 500:
+        factor = 20
+    elif 500 < num_points <= 1000:
+        factor = 50
+    elif 1000 < num_points <= 10000:
+        factor = 75
+    else:
+        factor = max(100, num_points // 250)
+    
+    logging.info(f'Downsampling data with factor: {factor}')
+
     num_aggregated_points = num_points // factor
 
     aggregated_dates = []
@@ -46,12 +69,12 @@ def downsample_data(data, factor):
 
     return {'dates': aggregated_dates, 'pln_exchange_rate': aggregated_pln_exchange_rate}
 
-def create_chart(data, output_file, downsample_factor=100):
-    downsampled_data = downsample_data(data, downsample_factor)
+def create_chart(data, output_file):
+    downsampled_data = downsample_data(data)
 
-    plt.figure(figsize=(10, 6))
+    logging.info('Creating a plot for PLN exchange rates over time.')
 
-    # Example: Create a line chart for 'buy_rate' over time
+    plt.figure(figsize=(16, 9))
     plt.plot(downsampled_data['dates'], downsampled_data['pln_exchange_rate'], label='PLN/UAH Rate over time', marker='o')
 
     # Customize chart
@@ -73,7 +96,7 @@ if __name__ == "__main__":
 
     # Read data from CSV
     try:
-        exchange_data = read_csv(csv_file_path)
+        exchange_data = read_csv(csv_file_path, limit=100000)
     except Exception as e:
         logging.error(f'Error reading CSV file: {str(e)}')
         exit(1)
