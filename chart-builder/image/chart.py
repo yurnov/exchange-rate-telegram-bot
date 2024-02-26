@@ -120,7 +120,8 @@ if __name__ == "__main__":
     # Update the file path with your CSV file
     csv_file_path = '../data/exchange_rates.csv'
     output_files = ['../data/usd.png', '../data/eur.png', '../data/pln.png']
-
+    currencies = ['USD', 'EUR', 'PLN']
+    
     # Read data from CSV
     try:
         exchange_data = read_csv(csv_file_path, limit=100000)
@@ -129,7 +130,6 @@ if __name__ == "__main__":
         exit(1)
 
     # Save Plots
-    currencies = ['USD', 'EUR', 'PLN']
     try:
         create_chart(exchange_data, currencies, output_files)
         logging.info('Charts created successfully')
