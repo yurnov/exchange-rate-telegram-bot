@@ -74,80 +74,52 @@ def downsample_data(data, buy_rate, sell_rate, buy_rate_eur, sell_rate_eur):
         aggregated_buy_rate_eur.append(np.mean(buy_rate_eur[start_index:end_index]))
         aggregated_sell_rate_eur.append(np.mean(sell_rate_eur[start_index:end_index]))
         aggregated_pln_exchange_rate.append(np.mean(pln_exchange_rate[start_index:end_index]))
-        
-        logging.info(f'amount of points: {len(aggregated_dates)}')
-        logging.info(f'amount of points: {len(aggregated_buy_rate)}')
 
     return {'dates': aggregated_dates, 'buy_rate': aggregated_buy_rate, 'sell_rate': aggregated_sell_rate,
             'buy_rate_eur':aggregated_buy_rate_eur, 'sell_rate_eur': aggregated_sell_rate_eur, 
             'pln_exchange_rate': aggregated_pln_exchange_rate}
 
-def create_chart(data, output_file_usd, output_file_eur, output_file_pln):
-    
-    downsampled_data = downsample_data(data, data['buy_rate'], data['sell_rate'], data['buy_rate_eur'], data['sell_rate_eur'])
-    logging.info(f'Downsampling data: {len(data["dates"])} points to {len(downsampled_data["dates"])} points.')
-    # Create a plot for USD exchange rates
-    logging.info('Creating a plot for USD exchange rates over time.')
 
-    plt.figure(figsize=(16, 9))
-    plt.plot(downsampled_data['dates'], downsampled_data['buy_rate'], label='USD/UAH Buy Rate', marker='o')
-    plt.plot(downsampled_data['dates'], downsampled_data['sell_rate'], label='USD/UAH Sell Rate', marker='o')
+def create_chart(data, currencies, output_files):
+    for currency, output_file in zip(currencies, output_files):
+        if currency not in ['USD', 'EUR', 'PLN']:
+            logging.error('Invalid currency')
+            raise ValueError('Invalid currency')
 
-    # Customize chart
-    plt.title('USD Exchange Rates Over Time')
-    plt.xlabel('Time')
-    plt.ylabel('USD Exchange Rate')
-    plt.legend()
-    plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
+        logging.info(f'Creating a plot for {currency} exchange rates over time.')
+        plt.figure(figsize=(16, 9))
 
-    # Save the chart as an image file
-    plt.tight_layout()
-    plt.savefig(output_file_usd)
-    plt.close()
+        downsampled_data = downsample_data(data, data['buy_rate'], data['sell_rate'], data['buy_rate_eur'], data['sell_rate_eur'])
 
-    # Create a plot for EUR exchange rates
-    logging.info('Creating a plot for EUR exchange rates over time.')
+        if currency == 'USD':
+            plt.plot(downsampled_data['dates'], downsampled_data['buy_rate'], label='USD/UAH Buy Rate', marker='o')
+            plt.plot(downsampled_data['dates'], downsampled_data['sell_rate'], label='USD/UAH Sell Rate', marker='o')
+            plt.title('USD Exchange Rates Over Time')
+            plt.ylabel('USD Exchange Rate')
 
-    plt.figure(figsize=(16, 9))
-    plt.plot(downsampled_data['dates'], downsampled_data['buy_rate_eur'], label='EUR/UAH Buy rate', marker='o')
-    plt.plot(downsampled_data['dates'], downsampled_data['sell_rate_eur'], label='EUR/UAH Sell over time', marker='o')
+        elif currency == 'EUR':
+            plt.plot(downsampled_data['dates'], downsampled_data['buy_rate_eur'], label='EUR/UAH Buy rate', marker='o')
+            plt.plot(downsampled_data['dates'], downsampled_data['sell_rate_eur'], label='EUR/UAH Sell over time', marker='o')
+            plt.title('EUR Exchange Rates Over Time')
+            plt.ylabel('EUR Exchange Rate')
 
-    # Customize chart
-    plt.title('EUR Exchange Rates Over Time')
-    plt.xlabel('Time')
-    plt.ylabel('EUR Exchange Rate')
-    plt.legend()
-    plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
+        elif currency == 'PLN':
+            plt.plot(downsampled_data['dates'], downsampled_data['pln_exchange_rate'], label='PLN/UAH Rate over time', marker='o')
+            plt.title('PLN Exchange Rates Over Time')
+            plt.ylabel('PLN Exchange Rate')
 
-    # Save the chart as an image file
-    plt.tight_layout()
-    plt.savefig(output_file_eur)
-    plt.close()
-
-    # Create a plot for PLN exchange rates
-    logging.info('Creating a plot for PLN exchange rates over time.')
-
-    plt.figure(figsize=(16, 9))
-    plt.plot(downsampled_data['dates'], downsampled_data['pln_exchange_rate'], label='PLN/UAH Rate over time', marker='o')
-
-    # Customize chart
-    plt.title('Exchange Rates Over Time')
-    plt.xlabel('Time')
-    plt.ylabel('Exchange Rate')
-    plt.legend()
-    plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
-
-    # Save the chart as an image file
-    plt.tight_layout()
-    plt.savefig(output_file_pln)
-    plt.close()
+        # Customize chart
+        plt.xlabel('Time')
+        plt.legend()
+        plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better readability
+        plt.tight_layout()
+        plt.savefig(output_file)
+        plt.close()
 
 if __name__ == "__main__":
     # Update the file path with your CSV file
     csv_file_path = '../data/exchange_rates.csv'
-    output_file_usd = '../data/usd.png'
-    output_file_eur = '../data/eur.png'
-    output_file_pln = '../data/pln.png'
+    output_files = ['../data/usd.png', '../data/eur.png', '../data/pln.png']
 
     # Read data from CSV
     try:
@@ -155,12 +127,12 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f'Error reading CSV file: {str(e)}')
         exit(1)
-    
-    # Save the chart as an image file (change 'chart.png' to your desired filename)
+
+    # Save Plots
+    currencies = ['USD', 'EUR', 'PLN']
     try:
-        create_chart(exchange_data, output_file_usd, output_file_eur, output_file_pln)
-        logging.info(f'Chart created successfully: {output_file_usd}, {output_file_eur}, {output_file_pln}')
-        exit(0)
+        create_chart(exchange_data, currencies, output_files)
+        logging.info('Charts created successfully')
     except Exception as e:
-        logging.error(f'Error creating chart: {str(e)}')
+        logging.error(f'Error creating charts: {str(e)}')
         exit(1)
