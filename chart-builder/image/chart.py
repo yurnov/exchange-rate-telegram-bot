@@ -49,9 +49,9 @@ def downsample_data(data, buy_rate, sell_rate, buy_rate_eur, sell_rate_eur):
     elif 500 < num_points <= 1000:
         factor = 50
     elif 1000 < num_points <= 5000:
-        factor = 75
+        factor = 120
     else:
-        factor = max(100, num_points // 120)
+        factor = max(200, num_points // 60)
 
     logging.info(f'Downsampling data with factor: {factor}')
 
