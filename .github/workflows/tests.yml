@@ -2,10 +2,10 @@ name: Run tests and build Docker image for development version
 on:
   push:
     branches:
-      - development
+      - 'dev*'
 
 jobs:
-  publish:
+  development:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -32,7 +32,7 @@ jobs:
 
       - name: Lint Python code
         run: |
-          black --check --skip-string-normalization --line-length 120 bot chart-builder
+          black --check --skip-string-normalization --line-length 120 bot
           find . -name *.py -exec pylint --disable=R,C,W1203 '{}' \;
 
       - name: Lint Dockerfile with hadolint
