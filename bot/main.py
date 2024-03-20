@@ -10,7 +10,13 @@ import threading
 from dotenv import load_dotenv
 
 from telegram import ForceReply, Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 MONOBANK_API_URL = "https://api.monobank.ua/bank/currency"
 
@@ -23,17 +29,16 @@ pln_rate = 0
 LOG_RATE = False
 
 # Enable initial logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 # set higher logging level for httpx to avoid all GET and POST requests being logged
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+
 def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
-    
+
     # pylint: disable=global-statement
     global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate
     # pylint: disable=broad-except
@@ -41,29 +46,44 @@ def get_exchange_rates():
         # Fetching exchange rates from Monobank API
         response = requests.get(MONOBANK_API_URL, timeout=10)
         data = response.json()
-        usd_rate = next(item for item in data if item['currencyCodeA'] == 840 and item['currencyCodeB'] == 980)['rateBuy']
-        usd_rate_sell = next(item for item in data if item['currencyCodeA'] == 840 and item['currencyCodeB'] == 980)['rateSell']
-        eur_rate = next(item for item in data if item['currencyCodeA'] == 978 and item['currencyCodeB'] == 980)['rateBuy']
-        eur_rate_sell = next(item for item in data if item['currencyCodeA'] == 978 and item['currencyCodeB'] == 980)['rateSell']
-        pln_rate = next(item for item in data if item['currencyCodeA'] == 985 and item['currencyCodeB'] == 980)['rateCross']
+        usd_rate = next(item for item in data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)[
+            "rateBuy"
+        ]
+        usd_rate_sell = next(item for item in data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)[
+            "rateSell"
+        ]
+        eur_rate = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)[
+            "rateBuy"
+        ]
+        eur_rate_sell = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)[
+            "rateSell"
+        ]
+        pln_rate = next(item for item in data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980)[
+            "rateCross"
+        ]
 
-        logger.info(f'USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}')
-        
+        logger.info(
+            f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}"
+        )
+
     except Exception as e:
         logger.error(f'Error fetching exchange rates: {str(e)}')
-    
+
     # Log exchange rates to CSV file
     # format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
     if LOG_RATE:
         if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
-            try: 
-                with open('exchange_rates.csv', 'a', encoding='utf-8') as file:
-                    file.write(f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n')
-                logger.info('Exchange rates written to exchange_rates.csv')
+            try:
+                with open("exchange_rates.csv", "a", encoding="utf-8") as file:
+                    file.write(
+                        f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n'
+                    )
+                logger.info("Exchange rates written to exchange_rates.csv")
             except Exception as e:
-                logger.error(f'Error writing to exchange_rates.csv: {str(e)}')
+                logger.error(f"Error writing to exchange_rates.csv: {str(e)}")
         else:
-            logger.error('Exchange rates are not fetched, not writing to exchange_rates.csv')
+            logger.error("Exchange rates are not fetched, not writing to exchange_rates.csv")
+
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -76,29 +96,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=ForceReply(selective=True),
     )
 
+
 # pylint: disable=unused-argument
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
-    await update.message.reply_text("Use /rate to get a rate!\n Base currency is 🇺🇦 Ukrainian Hryvnia (UAH ₴)\n\nPowered by Monobank API.")
+    await update.message.reply_text(
+        "Use /rate to get a rate!\n Base currency is 🇺🇦 Ukrainian Hryvnia (UAH ₴)\n\nPowered by Monobank API."
+    )
+
 
 # pylint: disable=unused-argument
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
-    logger.info(f'User {update.effective_user.id} requested exchange rates.')
-    
-    try:
-        await update.message.reply_text(f'🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}')
-        logger.info(f'Exchange rates sent to user {update.effective_user.id}')
+    logger.info(f"User {update.effective_user.id} requested exchange rates.")
 
-    # pylint: disable=broad-except    
+    try:
+        await update.message.reply_text(
+            f"🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
+        )
+        logger.info(f"Exchange rates sent to user {update.effective_user.id}")
+
+    # pylint: disable=broad-except
     except Exception as e:
-        await update.message.reply_text('Error heppened, please try again later.')
-        logger.error(f'Error fetching exchange rates: {str(e)}')
+        await update.message.reply_text("Error heppened, please try again later.")
+        logger.error(f"Error fetching exchange rates: {str(e)}")
+
 
 def run_schedule():
     while True:
         schedule.run_pending()
         time.sleep(1)
+
 
 def main() -> None:
 
@@ -115,14 +143,14 @@ def main() -> None:
     if PULL_INTERVAL is None:
         logger.info("PULL_INTERVAL is not defined, using default value 300")
         PULL_INTERVAL = 300
-    
+
     try:
         PULL_INTERVAL = int(PULL_INTERVAL)
     except ValueError:
         logger.error("PULL_INTERVAL must be an integer")
         logger.error("Using default value 300")
         PULL_INTERVAL = 300
-    
+
     if not 15 <= PULL_INTERVAL <= 3600:
         logger.error("PULL_INTERVAL must be an integer between 15 and 3600")
         logger.error("Using default value 300")
@@ -137,31 +165,39 @@ def main() -> None:
     logger.info("BOT_TOKEN is provided. Starting bot...")
 
     # Check if logging exchange rates to CSV is enabled
-    if LOG_RATE is None or LOG_RATE.lower() not in ['true', '1', 'yes']:
+    if LOG_RATE is None or LOG_RATE.lower() not in ["true", "1", "yes"]:
         LOG_RATE = False
-        logging.info('LOG_RATE is False or not defined, CSV logging is disabled.')
+        logging.info("LOG_RATE is False or not defined, CSV logging is disabled.")
     else:
         LOG_RATE = True
-        logger.info(f'LOG_RATE is set to {LOG_RATE}')
-        logger.info("Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate")
+        logger.info(f"LOG_RATE is set to {LOG_RATE}")
+        logger.info(
+            "Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate"
+        )
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
-    logger.info(f'Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.')
+    logger.info(f"Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.")
     schedule.every(PULL_INTERVAL).seconds.do(get_exchange_rates)
     schedule.run_all()
     thread = threading.Thread(target=run_schedule)
     thread.start()
 
-    if LOG_LEVEL is None or LOG_LEVEL.lower() not in ['debug', 'info', 'warning', 'error', 'critical']:
-        LOG_LEVEL = 'info'
-        logger.info('LOG_LEVEL is not defined or invalid, using default value info')
+    if LOG_LEVEL is None or LOG_LEVEL.lower() not in [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical",
+    ]:
+        LOG_LEVEL = "info"
+        logger.info("LOG_LEVEL is not defined or invalid, using default value info")
 
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
     # Set runtime logging level
-    if LOG_LEVEL.lower() != 'info':
-        logger.info(f'Switching LOG_LEVEL to user-defined value {LOG_LEVEL.upper()}')
+    if LOG_LEVEL.lower() != "info":
+        logger.info(f"Switching LOG_LEVEL to user-defined value {LOG_LEVEL.upper()}")
     logger.setLevel(LOG_LEVEL.upper())
 
     # on different commands - answer in Telegram

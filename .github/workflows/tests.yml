@@ -2,10 +2,10 @@ name: Run tests and build Docker image for development version
 on:
   push:
     branches:
-      - development
+      - 'dev*'
 
 jobs:
-  publish:
+  development:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -26,13 +26,14 @@ jobs:
         run: |
           $(cat Dockerfile | grep "pip install" | cut -f2- -d " ")
 
-      - name: Install pylint
+      - name: Install linters
         run: |
-          python -m pip install pylint==3.0.3
+          python -m pip install pylint==3.0.3 black==24.3.0
 
       - name: Lint Python code
         run: |
-          pylint --disable=R,C,W1203 bot/main.py
+          black --check --skip-string-normalization --line-length 120 bot;
+          find . -name *.py -exec pylint --disable=R,C,W1203 '{}' \;
 
       - name: Lint Dockerfile with hadolint
         uses: hadolint/hadolint-action@v2.1.0
