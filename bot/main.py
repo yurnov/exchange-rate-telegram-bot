@@ -67,8 +67,8 @@ def get_exchange_rates():
         )
 
     except Exception as e:
-        logger.error(f"Error fetching exchange rates: {str(e)}")
-
+        logger.error(f'Error fetching exchange rates: {str(e)}')
+    
     # Log exchange rates to CSV file
     # format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
     if LOG_RATE:
@@ -83,7 +83,6 @@ def get_exchange_rates():
                 logger.error(f"Error writing to exchange_rates.csv: {str(e)}")
         else:
             logger.error("Exchange rates are not fetched, not writing to exchange_rates.csv")
-
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
