@@ -19,6 +19,7 @@ from telegram.ext import (
 )
 
 MONOBANK_API_URL = "https://api.monobank.ua/bank/currency"
+NATIONAL_BANK_API_URL = "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
 
 # Initialize exchange rates
 usd_rate = 0
@@ -26,6 +27,9 @@ usd_rate_sell = 0
 eur_rate = 0
 eur_rate_sell = 0
 pln_rate = 0
+usd_rate_nbu = 0
+eur_rate_nbu = 0
+pln_rate_nbu = 0
 LOG_RATE = False
 
 # Enable initial logging
@@ -40,7 +44,7 @@ def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
 
     # pylint: disable=global-statement
-    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate
+    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu
     # pylint: disable=broad-except
     try:
         # Fetching exchange rates from Monobank API
@@ -84,6 +88,17 @@ def get_exchange_rates():
         else:
             logger.error("Exchange rates are not fetched, not writing to exchange_rates.csv")
 
+    try:
+        # Fetching exchange rates from National Bank of Ukraine API
+        response = requests.get(NATIONAL_BANK_API_URL, timeout=10)
+        data = response.json()
+        usd_rate_nbu = next(item for item in data if item["cc"] == "USD")["rate"]
+        eur_rate_nbu = next(item for item in data if item["cc"] == "EUR")["rate"]
+        pln_rate_nbu = next(item for item in data if item["cc"] == "PLN")["rate"]
+
+    except Exception as e:
+        logger.error(f"Error fetching exchange rates from NBU: {str(e)}")
+
 
 # pylint: disable=unused-argument
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -92,7 +107,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_html(
         rf"Hi {user.mention_html()}, "
         "I'm a exchange rate bot, I will help to to know actual exchange rate of USD, EUR and PLN in UAH. "
-        "Please use /rate to get information!",
+        "Please use /rate to get Mobobank exchange rate or /nbu to get NBU exchange rate.",
         reply_markup=ForceReply(selective=True),
     )
 
@@ -101,7 +116,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
-        "Use /rate to get a rate!\n Base currency is 🇺🇦 Ukrainian Hryvnia (UAH ₴)\n\nPowered by Monobank API."
+        "Use /rate to get a rate!\n Base currency is 🇺🇦 Ukrainian Hryvnia (UAH ₴)\nCommand /nbu will get to"
+        + " NBU rate\n\nPowered by Monobank API."
     )
 
 
@@ -115,6 +131,22 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
+
+    # pylint: disable=broad-except
+    except Exception as e:
+        await update.message.reply_text("Error heppened, please try again later.")
+        logger.error(f"Error fetching exchange rates: {str(e)}")
+
+
+async def nbu_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+    logger.info(f"User {update.effective_user.id} requested NBU rates.")
+
+    try:
+        await update.message.reply_text(
+            f"NBU rates:\n🇺🇸$ USD {usd_rate_nbu}\n🇪🇺€ EUR {eur_rate_nbu}\n🇵🇱zł PLN {pln_rate_nbu}"
+        )
+        logger.info(f"NBU rates sent to user {update.effective_user.id}")
 
     # pylint: disable=broad-except
     except Exception as e:
@@ -204,6 +236,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("rate", rate))
+    application.add_handler(CommandHandler("nbu", nbu_rate))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help_command))
 
     # Run the bot until the user presses Ctrl-C
