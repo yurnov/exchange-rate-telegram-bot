@@ -64,7 +64,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker image and push to registry
-        if: ${{ steps.tag_version.outputs.new_tag != 'undefined' }}
+        if: steps.tag_version.outputs.new_tag != null
         uses: docker/build-push-action@v3
         with:
           context: .

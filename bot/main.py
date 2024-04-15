@@ -128,7 +128,8 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         await update.message.reply_text(
-            f"🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
+            f"🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}."
+            + " Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
 
@@ -204,7 +205,8 @@ def main() -> None:
         LOG_RATE = True
         logger.info(f"LOG_RATE is set to {LOG_RATE}")
         logger.info(
-            "Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate"
+            "Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, "
+            + "PLN Exchange Rate"
         )
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
