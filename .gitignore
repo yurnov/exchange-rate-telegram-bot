@@ -3,6 +3,7 @@
 exchange_rates.csv
 chart-builder/data/*.csv
 chart-builder/data/*.png
+create_chart.sh
 # Python
 *.pyc
 __pycache__/
