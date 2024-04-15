@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.0
+
+NBU rates added
+
 ## v0.3.0
 
 [Optinal logging exchange rates to CSV file](https://github.com/yurnov/exchange-rate-telegram-bot/issues/4)

@@ -129,7 +129,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await update.message.reply_text(
             f"🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}."
-            + " Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
+            + f" Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
 
