@@ -5,11 +5,10 @@ LABEL org.opencontainers.image.authors="Yuriy Novostavskiy" \
       org.opencontainers.image.license="MIT" \
       org.opencontainers.image.description="A simple bot that sends the current exchange rate of the USD, EUR, and PLN to UAH from Monobank to a Telegram chat"
 
-RUN python -m pip install requests~=2.31.0 python-telegram-bot~=20.7 python-dotenv~=1.0.1 schedule~=1.2.1 black
+RUN python -m pip install requests~=2.31.0 python-telegram-bot~=20.7 python-dotenv~=1.0.1 schedule~=1.2.1
 
 WORKDIR /bot
 
-# COPY bot/* ./
+COPY bot/* ./
 
-# ENTRYPOINT [ "python", "main.py" ]
-CMD [ "black --check --skip-string-normalization --line-length 120 ." ]
+ENTRYPOINT [ "python", "main.py" ]
