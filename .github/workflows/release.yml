@@ -65,7 +65,7 @@ jobs:
 
       - name: Build Docker image and push to registry
         if: steps.tag_version.outputs.new_tag != null
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           # push to registry when merge to main
