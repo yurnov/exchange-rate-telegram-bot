@@ -1,2 +1,21 @@
+# ENV and project specific files
 .env
 exchange_rates.csv
+chart-builder/data/*.csv
+chart-builder/data/*.png
+create_chart.sh
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+# VSCode
+.vscode/
+*.code-workspace
+.history/
+.settings/
