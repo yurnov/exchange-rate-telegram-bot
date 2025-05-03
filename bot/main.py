@@ -106,9 +106,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
         rf"Hi {user.mention_html()}, "
-        "I'm a exchange rate bot, I will help to to know actual exchange rate of USD, EUR and PLN in UAH. "
-        "Please use /rate to get Mobobank exchange rate or /nbu to get NBU exchange rate.",
-        reply_markup=ForceReply(selective=True),
+        "I'm an exchange rate bot. I can help you check the current exchange rates for USD, EUR, and PLN in UAH. "
+        "Use /mono to get Monobank exchange rates or /nbu to get NBU exchange rates. "
+        "You can also use /help to see all available commands."
     )
 
 
@@ -116,44 +116,95 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
-        "Use /rate to get a rate!\n Base currency is 🇺🇦 Ukrainian Hryvnia (UAH ₴)\nCommand /nbu will get to"
-        + " NBU rate\n\nPowered by Monobank API."
+        "Hi, I'm the Exchange Rate Bot!\n\n"
+        "Here are the commands you can use:\n"
+        "/rate - Get the latest exchange rates.\n"
+        "/mono - Get exchange rates from Monobank.\n"
+        "/nbu - Get exchange rates from the National Bank of Ukraine (NBU).\n"
+        "/usd - Get USD exchange rates.\n"
+        "/eur - Get EUR exchange rates.\n"
+        "/pln - Get PLN exchange rates.\n\n"
+        "All rates are based on 🇺🇦 Ukrainian Hryvnia (UAH ₴).\n\n"
+        "Powered by Monobank API."
     )
 
 
 # pylint: disable=unused-argument
 async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-
     logger.info(f"User {update.effective_user.id} requested exchange rates.")
-
     try:
         await update.message.reply_text(
-            f"🇺🇸$ USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}\n🇪🇺€ EUR Buy Rate: {eur_rate}."
-            + f" Sell Rate: {eur_rate_sell}\n🇵🇱zł PLN Exchange Rate: {pln_rate}"
+            f"🇺🇸 USD:\n  Buy Rate: {usd_rate}\n  Sell Rate: {usd_rate_sell}\n  NBU Rate: {usd_rate_nbu}\n\n"
+            f"🇪🇺 EUR:\n  Buy Rate: {eur_rate}\n  Sell Rate: {eur_rate_sell}\n  NBU Rate: {eur_rate_nbu}\n\n"
+            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
-
-    # pylint: disable=broad-except
     except Exception as e:
-        await update.message.reply_text("Error heppened, please try again later.")
+        await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
+
+
+# pylint: disable=unused-argument
+async def mono_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info(f"User {update.effective_user.id} requested Monobank rates.")
+    try:
+        await update.message.reply_text(
+            f"🇺🇸 USD:\n  Buy Rate: {usd_rate}\n  Sell Rate: {usd_rate_sell}\n\n"
+            f"🇪🇺 EUR:\n  Buy Rate: {eur_rate}\n  Sell Rate: {eur_rate_sell}\n\n"
+            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}"
+        )
+        logger.info(f"Monobank rates sent to user {update.effective_user.id}")
+    except Exception as e:
+        await update.message.reply_text("An error occurred. Please try again later.")
+        logger.error(f"Error fetching Monobank rates: {str(e)}")
 
 
 async def nbu_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-
     logger.info(f"User {update.effective_user.id} requested NBU rates.")
-
     try:
         await update.message.reply_text(
-            f"NBU rates:\n🇺🇸$ USD {usd_rate_nbu}\n🇪🇺€ EUR {eur_rate_nbu}\n🇵🇱zł PLN {pln_rate_nbu}"
+            f"NBU Rates:\n🇺🇸 USD: {usd_rate_nbu}\n🇪🇺 EUR: {eur_rate_nbu}\n🇵🇱 PLN: {pln_rate_nbu}"
         )
         logger.info(f"NBU rates sent to user {update.effective_user.id}")
-
-    # pylint: disable=broad-except
     except Exception as e:
-        await update.message.reply_text("Error heppened, please try again later.")
+        await update.message.reply_text("An error occurred. Please try again later.")
+        logger.error(f"Error fetching NBU rates: {str(e)}")
+
+
+# pylint: disable=unused-argument
+async def usd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info(f"User {update.effective_user.id} requested exchange rates.")
+    try:
+        await update.message.reply_text(
+            f"🇺🇸 USD:\n  Buy Rate: {usd_rate}\n  Sell Rate: {usd_rate_sell}\n  NBU Rate: {usd_rate_nbu}\n\n"
+            )
+        logger.info(f"Exchange rates sent to user {update.effective_user.id}")
+    except Exception as e:
+        await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
 
+
+async def eur(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info(f"User {update.effective_user.id} requested exchange rates.")
+    try:
+        await update.message.reply_text(
+            f"🇪🇺 EUR:\n  Buy Rate: {eur_rate}\n  Sell Rate: {eur_rate_sell}\n  NBU Rate: {eur_rate_nbu}\n\n"
+        )
+        logger.info(f"Exchange rates sent to user {update.effective_user.id}")
+    except Exception as e:
+        await update.message.reply_text("An error occurred. Please try again later.")
+        logger.error(f"Error fetching exchange rates: {str(e)}")
+
+async def pln(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info(f"User {update.effective_user.id} requested exchange rates.")
+    try:
+        await update.message.reply_text(
+            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}"
+        )
+        logger.info(f"Exchange rates sent to user {update.effective_user.id}")
+    except Exception as e:
+        await update.message.reply_text("An error occurred. Please try again later.")
+        logger.error(f"Error fetching exchange rates: {str(e)}")
 
 def run_schedule():
     while True:
@@ -238,7 +289,11 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("rate", rate))
+    application.add_handler(CommandHandler("mono", mono_rate))
     application.add_handler(CommandHandler("nbu", nbu_rate))
+    application.add_handler(CommandHandler("usd", usd))
+    application.add_handler(CommandHandler("eur", eur))
+    application.add_handler(CommandHandler("pln", pln))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help_command))
 
     # Run the bot until the user presses Ctrl-C
