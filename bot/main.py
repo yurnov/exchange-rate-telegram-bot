@@ -9,7 +9,7 @@ import time
 import threading
 from dotenv import load_dotenv
 
-from telegram import ForceReply, Update
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -70,7 +70,7 @@ def get_exchange_rates():
             f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}"
         )
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Error fetching exchange rates: {str(e)}")
 
     # Log exchange rates to CSV file
@@ -83,7 +83,7 @@ def get_exchange_rates():
                         f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n'
                     )
                 logger.info("Exchange rates written to exchange_rates.csv")
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error(f"Error writing to exchange_rates.csv: {str(e)}")
         else:
             logger.error("Exchange rates are not fetched, not writing to exchange_rates.csv")
@@ -96,7 +96,7 @@ def get_exchange_rates():
         eur_rate_nbu = next(item for item in data if item["cc"] == "EUR")["rate"]
         pln_rate_nbu = next(item for item in data if item["cc"] == "PLN")["rate"]
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Error fetching exchange rates from NBU: {str(e)}")
 
 
@@ -139,7 +139,7 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
 
@@ -154,7 +154,7 @@ async def mono_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}"
         )
         logger.info(f"Monobank rates sent to user {update.effective_user.id}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching Monobank rates: {str(e)}")
 
@@ -166,7 +166,7 @@ async def nbu_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"NBU Rates:\n🇺🇸 USD: {usd_rate_nbu}\n🇪🇺 EUR: {eur_rate_nbu}\n🇵🇱 PLN: {pln_rate_nbu}"
         )
         logger.info(f"NBU rates sent to user {update.effective_user.id}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching NBU rates: {str(e)}")
 
@@ -177,9 +177,9 @@ async def usd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await update.message.reply_text(
             f"🇺🇸 USD:\n  Buy Rate: {usd_rate}\n  Sell Rate: {usd_rate_sell}\n  NBU Rate: {usd_rate_nbu}\n\n"
-            )
+        )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
 
@@ -191,20 +191,20 @@ async def eur(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"🇪🇺 EUR:\n  Buy Rate: {eur_rate}\n  Sell Rate: {eur_rate_sell}\n  NBU Rate: {eur_rate_nbu}\n\n"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
+
 
 async def pln(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f"User {update.effective_user.id} requested exchange rates.")
     try:
-        await update.message.reply_text(
-            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}"
-        )
+        await update.message.reply_text(f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}")
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
+
 
 def run_schedule():
     while True:
