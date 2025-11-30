@@ -2,7 +2,7 @@
 
 ## v0.7.0
 
-3PP lifecycle:
+[3PP lifecycle](https://github.com/yurnov/exchange-rate-telegram-bot/pull/28):
 - Python 3.14
 - Dependency updated
 - Dockerfile refactored to use requirements.txt for correct Dependabot action
