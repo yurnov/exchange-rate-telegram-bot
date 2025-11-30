@@ -211,7 +211,7 @@ async def pln(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def convert_currency(amount: float, from_currency: str, to_currency: str) -> tuple[float | None, None]:
     """
     Convert currency using Monobank rates.
-    For USD and EUR: uses buy/sell rates (buy when converting TO UAH, sell when converting FROM UAH)
+    For USD and EUR: uses sell rate when converting TO UAH, buy rate when converting FROM UAH
     For PLN: uses single cross rate
 
     Returns: (result, None) tuple where result is the converted amount or None if conversion fails
@@ -219,29 +219,29 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> tup
     from_curr = from_currency.upper()
     to_curr = to_currency.upper()
 
-    # UAH -> USD (selling UAH to buy USD, so we use sell rate)
+    # UAH -> USD (use buy rate)
     if from_curr == "UAH" and to_curr == "USD":
-        if usd_rate_sell == 0:
-            return None, None
-        return amount / usd_rate_sell, None
-
-    # USD -> UAH (buying UAH by selling USD, so we use buy rate)
-    if from_curr == "USD" and to_curr == "UAH":
         if usd_rate == 0:
             return None, None
-        return amount * usd_rate, None
+        return amount / usd_rate, None
 
-    # UAH -> EUR (selling UAH to buy EUR, so we use sell rate)
-    if from_curr == "UAH" and to_curr == "EUR":
-        if eur_rate_sell == 0:
+    # USD -> UAH (use sell rate)
+    if from_curr == "USD" and to_curr == "UAH":
+        if usd_rate_sell == 0:
             return None, None
-        return amount / eur_rate_sell, None
+        return amount * usd_rate_sell, None
 
-    # EUR -> UAH (buying UAH by selling EUR, so we use buy rate)
-    if from_curr == "EUR" and to_curr == "UAH":
+    # UAH -> EUR (use buy rate)
+    if from_curr == "UAH" and to_curr == "EUR":
         if eur_rate == 0:
             return None, None
-        return amount * eur_rate, None
+        return amount / eur_rate, None
+
+    # EUR -> UAH (use sell rate)
+    if from_curr == "EUR" and to_curr == "UAH":
+        if eur_rate_sell == 0:
+            return None, None
+        return amount * eur_rate_sell, None
 
     # UAH -> PLN (single rate)
     if from_curr == "UAH" and to_curr == "PLN":
@@ -322,13 +322,13 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Determine which rate was used for the message
     if from_currency in ["USD", "EUR"] or to_currency in ["USD", "EUR"]:
         if from_currency == "USD":
-            rate_info = f"(buy rate: {usd_rate})"
-        elif to_currency == "USD":
             rate_info = f"(sell rate: {usd_rate_sell})"
+        elif to_currency == "USD":
+            rate_info = f"(buy rate: {usd_rate})"
         elif from_currency == "EUR":
-            rate_info = f"(buy rate: {eur_rate})"
-        else:  # to_currency == "EUR"
             rate_info = f"(sell rate: {eur_rate_sell})"
+        else:  # to_currency == "EUR"
+            rate_info = f"(buy rate: {eur_rate})"
     else:
         rate_info = f"(rate: {pln_rate})"
 
