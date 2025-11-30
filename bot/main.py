@@ -48,8 +48,7 @@ def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
 
     # pylint: disable=global-statement
-    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu
-    global eur_usd_rate, eur_usd_rate_sell
+    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu, eur_usd_rate, eur_usd_rate_sell
     # pylint: disable=broad-except
     try:
         # Fetching exchange rates from Monobank API
