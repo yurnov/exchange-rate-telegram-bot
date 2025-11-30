@@ -71,12 +71,9 @@ def get_exchange_rates():
             "rateCross"
         ]
         # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
-        eur_usd_rate = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840)[
-            "rateBuy"
-        ]
-        eur_usd_rate_sell = next(
-            item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840
-        )["rateSell"]
+        eur_usd_item = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840)
+        eur_usd_rate = eur_usd_item["rateBuy"]
+        eur_usd_rate_sell = eur_usd_item["rateSell"]
 
         logger.info(
             f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}. EUR/USD Buy Rate: {eur_usd_rate}. Sell Rate: {eur_usd_rate_sell}"
