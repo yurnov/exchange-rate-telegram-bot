@@ -459,7 +459,11 @@ def main() -> None:
     application.add_handler(CommandHandler("eur", eur))
     application.add_handler(CommandHandler("pln", pln))
     application.add_handler(CommandHandler("calc", calc))
+    # Catch-all handlers for unrecognized input - must be added AFTER all specific CommandHandlers
+    # Handle non-command text messages (e.g., "calc" without slash)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help_command))
+    # Handle unrecognized commands (e.g., "/hepl" typo) - catches any /command not matched above
+    application.add_handler(MessageHandler(filters.COMMAND, help_command))
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
