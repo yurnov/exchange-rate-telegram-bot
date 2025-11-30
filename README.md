@@ -1,6 +1,6 @@
 # Exchange Rate Telegram Bot
 
-![python-version](https://img.shields.io/badge/python-3.12-blue.svg)
+![python-version](https://img.shields.io/badge/python-3.14-blue.svg)
 [![python-telegram-bot](https://img.shields.io/badge/Python-Telegram_bot-blue.svg)](https://github.com/python-telegram-bot/python-telegram-bot)
 [![license](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -16,7 +16,7 @@ A lightweight [Telegram bot](https://core.telegram.org/bots/api) running in a Do
 - **Automatic Updates**: Configurable rate refresh interval (15-3600 seconds)
 - **CSV Logging**: Optional logging of exchange rates with timestamps
 - **Minimal Configuration**: Only requires a bot token to get started
-- **Docker-Ready**: Runs in a lightweight container based on Python 3.12-slim
+- **Docker-Ready**: Runs in a lightweight container based on Python 3.14-slim
 
 ## Prerequisites
 
@@ -140,8 +140,8 @@ Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rat
 
 ### Architecture
 
-- **Language**: Python 3.12
-- **Framework**: [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v20.7
+- **Language**: Python 3.14
+- **Framework**: [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
 - **APIs**: 
   - [Monobank API](https://api.monobank.ua/docs/) - for market exchange rates
   - [NBU API](https://bank.gov.ua/ua/open-data/api-dev) - for official exchange rates
