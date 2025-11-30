@@ -1,0 +1,4 @@
+requests==3.4.4
+python-telegram-bot==22.5
+python-dotenv==1.2.1
+schedule==1.2.2

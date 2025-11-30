@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.7.0
+
+3PP lifecycle:
+- Python 3.14
+- Dependency updated
+- Dockerfile refactored to use requirements.txt for correct Dependabot action
+
+## v0.6.0
+
+[EUR<=>USD conversion support added](https://github.com/yurnov/exchange-rate-telegram-bot/pull/25)
+
+## v0.5.0
+
+New `/calc` command - Parses input like `/calc 100 USD` to UAH and returns converted amount with rate used [#22](https://github.com/yurnov/exchange-rate-telegram-bot/pull/22)
+
 ## v0.4.0
 
 NBU rates added
