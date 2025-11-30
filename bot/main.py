@@ -4,6 +4,7 @@
 import logging
 import requests
 import os
+import re
 import schedule
 import time
 import threading
@@ -123,7 +124,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/nbu - Get exchange rates from the National Bank of Ukraine (NBU).\n"
         "/usd - Get USD exchange rates.\n"
         "/eur - Get EUR exchange rates.\n"
-        "/pln - Get PLN exchange rates.\n\n"
+        "/pln - Get PLN exchange rates.\n"
+        "/calc - Convert currencies (e.g., /calc 100 USD to UAH).\n\n"
         "All rates are based on 🇺🇦 Ukrainian Hryvnia (UAH ₴).\n\n"
         "Powered by Monobank API."
     )
@@ -204,6 +206,136 @@ async def pln(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:  # pylint: disable=broad-exception-caught
         await update.message.reply_text("An error occurred. Please try again later.")
         logger.error(f"Error fetching exchange rates: {str(e)}")
+
+
+def convert_currency(amount: float, from_currency: str, to_currency: str) -> tuple[float | None, None]:
+    """
+    Convert currency using Monobank rates.
+    For USD and EUR: uses sell rate when converting TO UAH, buy rate when converting FROM UAH
+    For PLN: uses single cross rate
+
+    Returns: (result, None) tuple where result is the converted amount or None if conversion fails
+    """
+    from_curr = from_currency.upper()
+    to_curr = to_currency.upper()
+
+    # UAH -> USD (use buy rate)
+    if from_curr == "UAH" and to_curr == "USD":
+        if usd_rate == 0:
+            return None, None
+        return amount / usd_rate, None
+
+    # USD -> UAH (use sell rate)
+    if from_curr == "USD" and to_curr == "UAH":
+        if usd_rate_sell == 0:
+            return None, None
+        return amount * usd_rate_sell, None
+
+    # UAH -> EUR (use buy rate)
+    if from_curr == "UAH" and to_curr == "EUR":
+        if eur_rate == 0:
+            return None, None
+        return amount / eur_rate, None
+
+    # EUR -> UAH (use sell rate)
+    if from_curr == "EUR" and to_curr == "UAH":
+        if eur_rate_sell == 0:
+            return None, None
+        return amount * eur_rate_sell, None
+
+    # UAH -> PLN (single rate)
+    if from_curr == "UAH" and to_curr == "PLN":
+        if pln_rate == 0:
+            return None, None
+        return amount / pln_rate, None
+
+    # PLN -> UAH (single rate)
+    if from_curr == "PLN" and to_curr == "UAH":
+        if pln_rate == 0:
+            return None, None
+        return amount * pln_rate, None
+
+    return None, None
+
+
+async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle currency conversion command."""
+    logger.info(f"User {update.effective_user.id} requested currency conversion.")
+
+    # Get the text after /calc command
+    if context.args:
+        text = ' '.join(context.args)
+    else:
+        await update.message.reply_text(
+            "Please provide a conversion request.\n"
+            "Usage: /calc <amount> <FROM> to <TO>\n"
+            "Examples:\n"
+            "  /calc 100 USD to UAH\n"
+            "  /calc 1000 UAH to EUR\n"
+            "  /calc 500 PLN to UAH\n\n"
+            "Supported currencies: USD, EUR, PLN, UAH"
+        )
+        return
+
+    # Parse the conversion request
+    # Pattern: <amount> <currency> to <currency>
+    pattern = r'(\d+(?:\.\d+)?)\s*(USD|EUR|PLN|UAH)\s+to\s+(USD|EUR|PLN|UAH)'
+    match = re.match(pattern, text, re.IGNORECASE)
+
+    if not match:
+        await update.message.reply_text(
+            "Invalid format. Please use: /calc <amount> <FROM> to <TO>\n"
+            "Examples:\n"
+            "  /calc 100 USD to UAH\n"
+            "  /calc 1000 UAH to EUR\n"
+            "  /calc 500 PLN to UAH"
+        )
+        return
+
+    amount = float(match.group(1))
+    from_currency = match.group(2).upper()
+    to_currency = match.group(3).upper()
+
+    # Validate that we're converting to/from UAH
+    if from_currency != "UAH" and to_currency != "UAH":
+        await update.message.reply_text(
+            "❌ Conversions must be to or from UAH.\nPlease convert to UAH first, then to the desired currency."
+        )
+        return
+
+    if from_currency == to_currency:
+        await update.message.reply_text(f"🔄 {amount:.2f} {from_currency} = {amount:.2f} {to_currency}")
+        return
+
+    result, _ = convert_currency(amount, from_currency, to_currency)
+
+    if result is None:
+        await update.message.reply_text("❌ Exchange rates are not available. Please try again later.")
+        return
+
+    # Currency flags
+    flags = {"USD": "🇺🇸", "EUR": "🇪🇺", "PLN": "🇵🇱", "UAH": "🇺🇦"}
+
+    from_flag = flags.get(from_currency, "")
+    to_flag = flags.get(to_currency, "")
+
+    # Determine which rate was used for the message
+    if from_currency in ["USD", "EUR"] or to_currency in ["USD", "EUR"]:
+        if from_currency == "USD":
+            rate_info = f"(sell rate: {usd_rate_sell})"
+        elif to_currency == "USD":
+            rate_info = f"(buy rate: {usd_rate})"
+        elif from_currency == "EUR":
+            rate_info = f"(sell rate: {eur_rate_sell})"
+        else:  # to_currency == "EUR"
+            rate_info = f"(buy rate: {eur_rate})"
+    else:
+        rate_info = f"(rate: {pln_rate})"
+
+    await update.message.reply_text(
+        f"{from_flag} {amount:.2f} {from_currency} = {to_flag} {result:.2f} {to_currency}\n{rate_info}"
+    )
+    logger.info(f"Conversion result sent to user {update.effective_user.id}")
 
 
 def run_schedule():
@@ -294,6 +426,7 @@ def main() -> None:
     application.add_handler(CommandHandler("usd", usd))
     application.add_handler(CommandHandler("eur", eur))
     application.add_handler(CommandHandler("pln", pln))
+    application.add_handler(CommandHandler("calc", calc))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, help_command))
 
     # Run the bot until the user presses Ctrl-C
