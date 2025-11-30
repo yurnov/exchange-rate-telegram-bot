@@ -35,7 +35,7 @@ A lightweight [Telegram bot](https://core.telegram.org/bots/api) running in a Do
 | `/usd` | Get USD exchange rates (all sources) |
 | `/eur` | Get EUR exchange rates (all sources) |
 | `/pln` | Get PLN exchange rates (all sources) |
-| `/calc` | Convert currencies (e.g., `/calc 100 USD to UAH`) |
+| `/calc` | Convert currencies (e.g., `/calc 100 USD to UAH`, `/calc 100 EUR to USD`) |
 
 ### Currency Converter Usage
 
@@ -45,9 +45,11 @@ Convert amounts between currencies using the `/calc` command:
 /calc 100 USD to UAH
 /calc 1000 UAH to EUR
 /calc 500 PLN to UAH
+/calc 100 EUR to USD
+/calc 200 USD to EUR
 ```
 
-**Note**: All conversions must involve UAH (to or from). The bot uses Monobank sell rates when converting foreign currency to UAH, and buy rates when converting UAH to foreign currency.
+**Note**: Conversions must involve UAH (to or from), or be between EUR and USD. The bot uses Monobank sell rates when converting foreign currency to UAH, and buy rates when converting UAH to foreign currency. EUR ↔ USD conversions use the direct exchange rate provided by Monobank.
 
 ## Configuration
 

@@ -31,6 +31,9 @@ pln_rate = 0
 usd_rate_nbu = 0
 eur_rate_nbu = 0
 pln_rate_nbu = 0
+# EUR to USD conversion rates
+eur_usd_rate = 0
+eur_usd_rate_sell = 0
 LOG_RATE = False
 
 # Enable initial logging
@@ -45,7 +48,7 @@ def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
 
     # pylint: disable=global-statement
-    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu
+    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu, eur_usd_rate, eur_usd_rate_sell
     # pylint: disable=broad-except
     try:
         # Fetching exchange rates from Monobank API
@@ -66,9 +69,13 @@ def get_exchange_rates():
         pln_rate = next(item for item in data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980)[
             "rateCross"
         ]
+        # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
+        eur_usd_item = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840)
+        eur_usd_rate = eur_usd_item["rateBuy"]
+        eur_usd_rate_sell = eur_usd_item["rateSell"]
 
         logger.info(
-            f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}"
+            f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}. EUR/USD Buy Rate: {eur_usd_rate}. Sell Rate: {eur_usd_rate_sell}"
         )
 
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -125,8 +132,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/usd - Get USD exchange rates.\n"
         "/eur - Get EUR exchange rates.\n"
         "/pln - Get PLN exchange rates.\n"
-        "/calc - Convert currencies (e.g., /calc 100 USD to UAH).\n\n"
-        "All rates are based on 🇺🇦 Ukrainian Hryvnia (UAH ₴).\n\n"
+        "/calc - Convert currencies (e.g., /calc 100 USD to UAH, /calc 100 EUR to USD).\n\n"
+        "All rates are based on 🇺🇦 Ukrainian Hryvnia (UAH ₴).\n"
+        "EUR ↔ USD conversion is also supported.\n\n"
         "Powered by Monobank API."
     )
 
@@ -213,6 +221,7 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> tup
     Convert currency using Monobank rates.
     For USD and EUR: uses sell rate when converting TO UAH, buy rate when converting FROM UAH
     For PLN: uses single cross rate
+    For EUR <-> USD: uses direct EUR/USD rates from Monobank
 
     Returns: (result, None) tuple where result is the converted amount or None if conversion fails
     """
@@ -255,6 +264,18 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> tup
             return None, None
         return amount * pln_rate, None
 
+    # EUR -> USD (use sell rate)
+    if from_curr == "EUR" and to_curr == "USD":
+        if eur_usd_rate_sell == 0:
+            return None, None
+        return amount * eur_usd_rate_sell, None
+
+    # USD -> EUR (use buy rate)
+    if from_curr == "USD" and to_curr == "EUR":
+        if eur_usd_rate == 0:
+            return None, None
+        return amount / eur_usd_rate, None
+
     return None, None
 
 
@@ -272,7 +293,8 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "Examples:\n"
             "  /calc 100 USD to UAH\n"
             "  /calc 1000 UAH to EUR\n"
-            "  /calc 500 PLN to UAH\n\n"
+            "  /calc 500 PLN to UAH\n"
+            "  /calc 100 EUR to USD\n\n"
             "Supported currencies: USD, EUR, PLN, UAH"
         )
         return
@@ -288,7 +310,8 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "Examples:\n"
             "  /calc 100 USD to UAH\n"
             "  /calc 1000 UAH to EUR\n"
-            "  /calc 500 PLN to UAH"
+            "  /calc 500 PLN to UAH\n"
+            "  /calc 100 EUR to USD"
         )
         return
 
@@ -296,10 +319,15 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from_currency = match.group(2).upper()
     to_currency = match.group(3).upper()
 
-    # Validate that we're converting to/from UAH
-    if from_currency != "UAH" and to_currency != "UAH":
+    # Check if this is a valid conversion pair
+    # Allow: any currency <-> UAH, and EUR <-> USD
+    is_eur_usd = (from_currency == "EUR" and to_currency == "USD") or (from_currency == "USD" and to_currency == "EUR")
+    is_uah_conversion = from_currency == "UAH" or to_currency == "UAH"
+
+    if not is_eur_usd and not is_uah_conversion:
         await update.message.reply_text(
-            "❌ Conversions must be to or from UAH.\nPlease convert to UAH first, then to the desired currency."
+            "❌ Conversions must be to or from UAH, or between EUR and USD.\n"
+            "Please convert to UAH first, then to the desired currency."
         )
         return
 
@@ -320,7 +348,11 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     to_flag = flags.get(to_currency, "")
 
     # Determine which rate was used for the message
-    if from_currency in ["USD", "EUR"] or to_currency in ["USD", "EUR"]:
+    if from_currency == "EUR" and to_currency == "USD":
+        rate_info = f"(EUR/USD sell rate: {eur_usd_rate_sell})"
+    elif from_currency == "USD" and to_currency == "EUR":
+        rate_info = f"(EUR/USD buy rate: {eur_usd_rate})"
+    elif from_currency in ["USD", "EUR"] or to_currency in ["USD", "EUR"]:
         if from_currency == "USD":
             rate_info = f"(sell rate: {usd_rate_sell})"
         elif to_currency == "USD":
