@@ -197,9 +197,8 @@ Contributions are welcome! Here's how you can help:
 git clone https://github.com/your-username/exchange-rate-telegram-bot.git
 cd exchange-rate-telegram-bot
 
-# Install dependencies
-pip install -r requirements.txt  # if requirements.txt exists
-# or manually: pip install requests python-telegram-bot python-dotenv schedule
+# Install dependencies (no requirements.txt in repo)
+pip install requests python-telegram-bot python-dotenv schedule
 
 # Create .env file with your bot token
 cp .env.example .env
