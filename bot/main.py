@@ -208,13 +208,13 @@ async def pln(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Error fetching exchange rates: {str(e)}")
 
 
-def convert_currency(amount: float, from_currency: str, to_currency: str) -> tuple:
+def convert_currency(amount: float, from_currency: str, to_currency: str) -> tuple[float | None, None]:
     """
     Convert currency using Monobank rates.
     For USD and EUR: uses buy/sell rates (buy when converting TO UAH, sell when converting FROM UAH)
     For PLN: uses single cross rate
 
-    Returns: (result_buy, result_sell) for USD/EUR or (result, None) for PLN
+    Returns: (result, None) tuple where result is the converted amount or None if conversion fails
     """
     from_curr = from_currency.upper()
     to_curr = to_currency.upper()
@@ -279,7 +279,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Parse the conversion request
     # Pattern: <amount> <currency> to <currency>
-    pattern = r'(\d+(?:\.\d+)?)\s*(USD|EUR|PLN|UAH)\s+(?:to|TO|To)\s+(USD|EUR|PLN|UAH)'
+    pattern = r'(\d+(?:\.\d+)?)\s*(USD|EUR|PLN|UAH)\s+to\s+(USD|EUR|PLN|UAH)'
     match = re.match(pattern, text, re.IGNORECASE)
 
     if not match:
