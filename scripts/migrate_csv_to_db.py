@@ -17,7 +17,13 @@ from pathlib import Path
 # Add parent directory to path to import database module
 sys.path.insert(0, str(Path(__file__).parent.parent / "bot"))
 
-from database import ExchangeRateDatabase
+# Import database module with error handling
+try:
+    from database import ExchangeRateDatabase
+except ImportError as e:
+    print(f"Error: Cannot import database module: {e}")
+    print("Please ensure the database.py file exists in the bot/ directory.")
+    sys.exit(1)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

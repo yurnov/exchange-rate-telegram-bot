@@ -20,7 +20,14 @@ from telegram.ext import (
     filters,
 )
 
-from database import ExchangeRateDatabase
+# Import database module if available
+try:
+    from database import ExchangeRateDatabase
+    DB_MODULE_AVAILABLE = True
+except ImportError:
+    logger.warning("Database module not available. Database logging will be disabled.")
+    ExchangeRateDatabase = None
+    DB_MODULE_AVAILABLE = False
 
 MONOBANK_API_URL = "https://api.monobank.ua/bank/currency"
 NATIONAL_BANK_API_URL = "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
@@ -459,21 +466,26 @@ def main() -> None:
         DB_ENABLED = True
         logger.info(f"DB_ENABLED is set to {DB_ENABLED}")
         
-        # Initialize database
-        if DB_PATH is None or DB_PATH == "":
-            DB_PATH = "data/exchange_rates.db"
-            logger.info(f"DB_PATH not defined, using default: {DB_PATH}")
-        else:
-            logger.info(f"DB_PATH is set to {DB_PATH}")
-        
-        try:
-            db = ExchangeRateDatabase(DB_PATH)
-            db.connect()
-            logger.info("Database initialized successfully")
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Error initializing database: {e}")
-            logger.error("Continuing without database logging")
+        # Check if database module is available
+        if not DB_MODULE_AVAILABLE:
+            logger.error("Database module not available. Cannot enable database logging.")
             DB_ENABLED = False
+        else:
+            # Initialize database
+            if DB_PATH is None or DB_PATH == "":
+                DB_PATH = "data/exchange_rates.db"
+                logger.info(f"DB_PATH not defined, using default: {DB_PATH}")
+            else:
+                logger.info(f"DB_PATH is set to {DB_PATH}")
+            
+            try:
+                db = ExchangeRateDatabase(DB_PATH)
+                db.connect()
+                logger.info("Database initialized successfully")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error(f"Error initializing database: {e}")
+                logger.error("Continuing without database logging")
+                DB_ENABLED = False
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
     logger.info(f"Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.")

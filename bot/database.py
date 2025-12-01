@@ -4,6 +4,13 @@
 """
 SQLite database module for storing exchange rate historical data.
 Stores ALL exchange rates from APIs (Monobank and NBU) for comprehensive analysis.
+
+Thread Safety Note:
+This module uses check_same_thread=False for SQLite connection to allow access
+from the scheduler thread. The bot architecture uses a single writer thread
+(scheduler) for all database operations, making this safe for this use case.
+For multi-threaded write scenarios, consider using a connection pool or 
+thread-local connections.
 """
 
 import sqlite3
@@ -11,12 +18,20 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 
 
 class ExchangeRateDatabase:
-    """SQLite database manager for exchange rates."""
+    """
+    SQLite database manager for exchange rates.
+    
+    Thread Safety:
+    - Designed for single-writer, multiple-reader pattern
+    - All write operations should be called from the same thread (scheduler)
+    - Uses WAL mode for better concurrent read access
+    """
 
     def __init__(self, db_path: str = "data/exchange_rates.db"):
         """
@@ -27,6 +42,7 @@ class ExchangeRateDatabase:
         """
         self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
+        self._lock = threading.Lock()  # Lock for thread-safe operations
         self._ensure_data_directory()
         
     def _ensure_data_directory(self):
@@ -37,7 +53,12 @@ class ExchangeRateDatabase:
             logger.info(f"Created data directory: {data_dir}")
     
     def connect(self):
-        """Establish database connection and initialize schema."""
+        """
+        Establish database connection and initialize schema.
+        
+        Note: Uses check_same_thread=False to allow scheduler thread access.
+        This is safe for single-writer scenarios like this bot.
+        """
         try:
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             # Enable foreign key constraints
@@ -237,6 +258,7 @@ class ExchangeRateDatabase:
     def insert_exchange_rates(self, rates: List[Dict[str, Any]], source: str, timestamp: Optional[datetime] = None):
         """
         Insert exchange rates from API response.
+        Thread-safe operation using lock.
         
         Args:
             rates: List of rate dictionaries from API
@@ -256,51 +278,53 @@ class ExchangeRateDatabase:
         inserted_count = 0
         skipped_count = 0
         
-        try:
-            cursor = self.conn.cursor()
-            
-            for rate_data in rates:
-                try:
-                    if source == 'monobank':
-                        # Monobank API format
-                        currency_code_a = rate_data.get('currencyCodeA')
-                        currency_code_b = rate_data.get('currencyCodeB')
-                        rate_buy = rate_data.get('rateBuy')
-                        rate_sell = rate_data.get('rateSell')
-                        rate_cross = rate_data.get('rateCross')
-                    elif source == 'nbu':
-                        # NBU API format - need to adapt
-                        currency_code_a = rate_data.get('r030')  # NBU numeric code
-                        currency_code_b = 980  # UAH
-                        rate_buy = None
-                        rate_sell = None
-                        rate_cross = rate_data.get('rate')
-                    else:
-                        logger.warning(f"Unknown source: {source}")
-                        continue
-                    
-                    # Insert or ignore if duplicate
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO exchange_rates 
-                        (timestamp, source, currency_code_a, currency_code_b, rate_buy, rate_sell, rate_cross)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (timestamp_str, source, currency_code_a, currency_code_b, rate_buy, rate_sell, rate_cross))
-                    
-                    if cursor.rowcount > 0:
-                        inserted_count += 1
-                    else:
-                        skipped_count += 1
+        # Use lock for thread-safe database access
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                
+                for rate_data in rates:
+                    try:
+                        if source == 'monobank':
+                            # Monobank API format
+                            currency_code_a = rate_data.get('currencyCodeA')
+                            currency_code_b = rate_data.get('currencyCodeB')
+                            rate_buy = rate_data.get('rateBuy')
+                            rate_sell = rate_data.get('rateSell')
+                            rate_cross = rate_data.get('rateCross')
+                        elif source == 'nbu':
+                            # NBU API format - need to adapt
+                            currency_code_a = rate_data.get('r030')  # NBU numeric code
+                            currency_code_b = 980  # UAH
+                            rate_buy = None
+                            rate_sell = None
+                            rate_cross = rate_data.get('rate')
+                        else:
+                            logger.warning(f"Unknown source: {source}")
+                            continue
                         
-                except (KeyError, TypeError) as e:
-                    logger.warning(f"Error processing rate data: {e}")
-                    continue
-            
-            self.conn.commit()
-            logger.info(f"Inserted {inserted_count} rates from {source}, skipped {skipped_count} duplicates")
-            
-        except sqlite3.Error as e:
-            logger.error(f"Error inserting exchange rates: {e}")
-            self.conn.rollback()
+                        # Insert or ignore if duplicate
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO exchange_rates 
+                            (timestamp, source, currency_code_a, currency_code_b, rate_buy, rate_sell, rate_cross)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (timestamp_str, source, currency_code_a, currency_code_b, rate_buy, rate_sell, rate_cross))
+                        
+                        if cursor.rowcount > 0:
+                            inserted_count += 1
+                        else:
+                            skipped_count += 1
+                            
+                    except (KeyError, TypeError) as e:
+                        logger.warning(f"Error processing rate data: {e}")
+                        continue
+                
+                self.conn.commit()
+                logger.info(f"Inserted {inserted_count} rates from {source}, skipped {skipped_count} duplicates")
+                
+            except sqlite3.Error as e:
+                logger.error(f"Error inserting exchange rates: {e}")
+                self.conn.rollback()
     
     def get_latest_rates(self, currency_code_a: Optional[int] = None, 
                         currency_code_b: Optional[int] = None,
