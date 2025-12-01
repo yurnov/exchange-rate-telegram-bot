@@ -99,16 +99,17 @@ The Monobank API returns approximately **100+ currency pairs** per request. To f
 
 #### Revised Storage Strategy
 
-Instead of blindly storing all ~100 pairs every 5 minutes, we implement **timestamp-based change detection**:
+Instead of blindly storing all ~100 pairs every 5 minutes, we leverage **database constraints for automatic deduplication**:
 
-1. **Store only when rate actually changes**: Check the API's `date` timestamp for each pair
-2. **Track last-seen timestamp per pair**: Keep a cache of the most recent timestamp we've stored for each currency pair
-3. **Insert only if timestamp is newer**: Only write to database if `API_timestamp > last_stored_timestamp`
+1. **Insert all rates from API**: Use `INSERT OR IGNORE` to attempt inserting all rates
+2. **UNIQUE constraint handles deduplication**: `(source, currency_code_a, currency_code_b, api_timestamp)` constraint automatically prevents duplicate entries
+3. **SQLite efficiently ignores duplicates**: No pre-filtering needed; database handles it at insert time
 
-This optimization significantly reduces redundant storage:
-- **High-frequency pairs**: Still stored frequently (every 5-15 minutes)
-- **Low-frequency pairs**: Stored only when actually updated (potentially once per day or less)
-- **Estimated reduction**: 40-60% fewer database writes for infrequently-updated pairs
+This approach significantly reduces redundant storage while keeping implementation simple:
+- **High-frequency pairs**: Inserted frequently as their `api_timestamp` changes
+- **Low-frequency pairs**: Automatically ignored if their `api_timestamp` hasn't changed
+- **No additional complexity**: No in-memory cache, no pre-checks, survives container restarts
+- **Estimated reduction**: 40-60% fewer stored records for infrequently-updated pairs
 
 #### Updated Volume Estimation
 
@@ -125,7 +126,7 @@ This optimization significantly reduces redundant storage:
 - **Record size**: ~80-100 bytes per record
 - **Total storage**: ~2.5-3.2 GB for 5 years (vs. ~5-7 GB without optimization)
 
-**Note**: SQLite remains highly suitable for this volume. The timestamp-based approach also provides more accurate historical data, as it reflects the actual time each rate was updated by Monobank, not our polling time.
+**Note**: SQLite remains highly suitable for this volume. The constraint-based approach provides accurate historical data (reflects actual rate update times) while keeping implementation simple and reliable across container restarts.
 
 ### Database Comparison
 
@@ -377,10 +378,10 @@ CREATE INDEX idx_rates_currency_a ON exchange_rates(currency_code_a, api_timesta
    - Allows idempotent inserts (re-running won't create duplicates)
    - Uses `api_timestamp` instead of our polling `timestamp` to accurately represent rate changes
 
-3. **Change Detection Strategy**:
-   - Before inserting, check if this `api_timestamp` already exists for this pair
-   - Only insert if `api_timestamp` is newer than the last stored value
-   - This automatically deduplicates unchanged rates across multiple API polls
+3. **Automatic Deduplication Strategy**:
+   - Use `INSERT OR IGNORE` to handle duplicate timestamps gracefully
+   - The UNIQUE constraint automatically prevents storing the same rate multiple times
+   - No additional change detection logic needed - SQLite handles it efficiently
 
 **Note**: SQLite foreign key constraints are optional for this use case since:
 1. Currency codes come directly from the API (trusted source)
@@ -633,7 +634,7 @@ ORDER BY updates_per_hour DESC;
    - Database initialization
    - Schema creation with dual timestamp fields (`timestamp` and `api_timestamp`)
    - Connection management
-   - CRUD operations with timestamp-based change detection
+   - CRUD operations using `INSERT OR IGNORE` for automatic deduplication
 
 2. Update Docker Compose configuration
    - Add volume mount for database file
@@ -643,18 +644,13 @@ ORDER BY updates_per_hour DESC;
    - `DB_ENABLED` - Enable/disable database logging (default: False for backward compatibility)
    - `DB_PATH` - Path to SQLite database file
 
-4. Implement timestamp-based deduplication logic
-   - Cache last-seen `api_timestamp` per currency pair (in-memory)
-   - Query database on startup to populate cache
-   - Only insert rates when `api_timestamp` from API is newer than cached value
-
 ### Phase 2: Exchange Rate Storage (Issue #19 - Updated)
 **Priority: High | Effort: Medium**
 
 1. Update `get_exchange_rates()` function
    - Extract `date` field from each currency pair in Monobank API response
-   - Implement timestamp-based change detection before inserting
-   - Add database insertion only for rates with new `api_timestamp` values
+   - Use `INSERT OR IGNORE` to handle duplicate timestamps automatically
+   - Add database insertion for all rates (UNIQUE constraint prevents duplicates)
    - Implement error handling for database operations
    - Ensure both Monobank and NBU rates are stored (NBU doesn't provide per-rate timestamps, so use polling time)
 
@@ -665,13 +661,12 @@ ORDER BY updates_per_hour DESC;
 
 3. Add data validation
    - Validate rates before insertion
-   - Handle duplicate entries gracefully using UNIQUE constraint
-   - Log statistics on how many rates were new vs. skipped (unchanged)
+   - Let UNIQUE constraint handle duplicate entries automatically
+   - Log statistics on how many rates were successfully inserted vs. ignored (duplicates)
 
 4. Optimize for efficiency
-   - Batch insert all new rates in a single transaction
-   - Use in-memory cache to track last-seen timestamps per pair
-   - Minimize database queries by checking cache first
+   - Batch insert all rates in a single transaction using `INSERT OR IGNORE`
+   - SQLite's UNIQUE constraint efficiently handles deduplication without additional logic
 
 ### Phase 3: CSV Migration Script (Issue #21 - Updated)
 **Priority: Medium | Effort: Medium**
@@ -730,16 +725,16 @@ The Monobank API provides individual `date` timestamps (Unix time) for each curr
     - `timestamp`: Our polling time (for audit/debug)
     - `api_timestamp`: API's `date` field (authoritative update time)
 - [ ] Extract `date` field from each currency pair in Monobank API response
-- [ ] Implement timestamp-based change detection:
-  - Maintain in-memory cache of last-seen `api_timestamp` per currency pair
-  - Only insert rates when `api_timestamp` is newer than cached value
-  - Use UNIQUE constraint on `(source, currency_code_a, currency_code_b, api_timestamp)` to prevent duplicates
+- [ ] Implement automatic deduplication using database constraints:
+  - Use `INSERT OR IGNORE` to handle duplicates gracefully
+  - UNIQUE constraint on `(source, currency_code_a, currency_code_b, api_timestamp)` prevents duplicate rates
+  - No additional in-memory cache or pre-check logic needed
 - [ ] Update `get_exchange_rates()` to store ALL rates from API when `DB_ENABLED=True`
-- [ ] Store complete Monobank API response (~100 currency pairs per call, but only changed rates)
+- [ ] Store complete Monobank API response (~100 currency pairs per call)
 - [ ] Store complete NBU API response (~30 currencies per call)
 - [ ] Store rate_buy, rate_sell, and rate_cross in a single row per currency pair
-- [ ] Batch insert all new rates in a single transaction for performance
-- [ ] Log statistics: total pairs fetched, new rates stored, unchanged rates skipped
+- [ ] Batch insert all rates in a single transaction using `INSERT OR IGNORE`
+- [ ] Log statistics: total pairs processed, new rates inserted, duplicate rates ignored
 - [ ] Maintain backward compatibility with CSV logging (CSV still logs only USD, EUR, PLN)
 - [ ] Add `DB_ENABLED` and `DB_PATH` environment variables
 - [ ] Update `.env.example` with new configuration options
@@ -749,8 +744,15 @@ The Monobank API provides individual `date` timestamps (Unix time) for each curr
 - Store database in `/bot/data/exchange_rates.db` (configurable)
 - Enable WAL mode for better concurrent access
 - Use ISO 4217 numeric currency codes from API directly
-- Implement efficient in-memory cache (dict) for last-seen timestamps: `{(source, code_a, code_b): api_timestamp}`
-- On startup, populate cache from database: `SELECT source, currency_code_a, currency_code_b, MAX(api_timestamp) FROM exchange_rates GROUP BY ...`
+- Use `INSERT OR IGNORE` for idempotent inserts - SQLite automatically ignores duplicates based on UNIQUE constraint
+- Example insert pattern:
+  ```python
+  cursor.executemany(
+      "INSERT OR IGNORE INTO exchange_rates (timestamp, api_timestamp, source, currency_code_a, currency_code_b, rate_buy, rate_sell, rate_cross) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      rate_data
+  )
+  ```
+- Track insert success using `cursor.rowcount` to log statistics (rows actually inserted vs. ignored)
 - Add appropriate indexes for time-range and currency-pair queries on both `timestamp` and `api_timestamp`
 - For NBU rates, use current polling time as `api_timestamp` since NBU doesn't provide per-rate timestamps
 
@@ -1013,9 +1015,10 @@ The recommended approach uses SQLite as an embedded time-series database, provid
 - **Analytics-ready**: Rich SQL query support for trend analysis, aggregations, and charting
 - **Visualization-ready**: Compatible with Grafana and Python data analysis tools (pandas, matplotlib)
 - **Scalable**: Handles millions of records efficiently (estimated ~31.5M records over 5 years with optimization)
-- **Intelligent deduplication**: Uses API-provided per-pair timestamps to avoid storing unchanged rates
+- **Intelligent deduplication**: Uses API-provided per-pair timestamps with database constraints
   - **40-60% storage reduction**: Only stores rates when they actually change
   - **Accurate timestamps**: Records actual rate update times, not just polling times
+  - **Simple & reliable**: `INSERT OR IGNORE` with UNIQUE constraint - no in-memory state, survives restarts
   - **Efficient queries**: Dual timestamp fields enable both audit trails and accurate time-series analysis
 - **Update frequency awareness**: Automatically adapts to different update patterns (high-frequency pairs like USD/UAH vs. low-frequency exotic currencies)
 
@@ -1027,11 +1030,12 @@ The critical insight from analyzing the actual Monobank API is that **each curre
 - **Medium-frequency pairs**: Updated hourly or several times per day  
 - **Low-frequency pairs** (exotic currencies): Updated once per day or less frequently
 
-By using these per-pair timestamps for change detection, we:
+By using these per-pair timestamps with database constraints, we:
 1. **Reduce storage by 40-60%**: Don't store redundant unchanged rates
 2. **Improve data accuracy**: Record the actual update time, not our arbitrary polling time
 3. **Enable better analytics**: Queries reflect real rate changes, not polling artifacts
-4. **Optimize performance**: Fewer database writes, faster queries on smaller dataset
+4. **Keep it simple**: Database handles deduplication automatically - no in-memory cache, no complex logic
+5. **Ensure reliability**: Works correctly across container restarts and failures
 
 This plan maintains the project's lightweight nature while significantly improving data storage, querying, and analysis capabilities for all available currencies, with smart optimization based on actual API behavior.
 
