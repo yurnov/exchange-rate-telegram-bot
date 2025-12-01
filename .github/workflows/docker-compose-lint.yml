@@ -1,4 +1,4 @@
-name: Lint Docker Compose
+name: Lint Docker files
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
       - 'dev*'
 
 jobs:
-  lint-docker-compose:
+  lint-docker:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -20,6 +20,13 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
+
+      - name: Lint Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+          ignore: DL3008,SC3009,DL3013
 
       - name: Lint docker-compose.yml
         uses: zavoloklom/docker-compose-linter@v1.0.0
