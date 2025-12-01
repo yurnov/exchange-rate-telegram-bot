@@ -15,6 +15,7 @@ The goal is to replace/extend the current CSV-based logging with a time-series d
 - CSV format: `Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate`
 - Data is appended every `PULL_INTERVAL` seconds (default: 300s / 5 min)
 - No database infrastructure exists
+- **Important**: Monobank API provides individual `date` timestamps (Unix time) for each currency pair, with update frequencies varying significantly between pairs
 
 ### Requirements
 - Store exchange rate data with 5-minute granularity
@@ -25,6 +26,58 @@ The goal is to replace/extend the current CSV-based logging with a time-series d
 - Support migration from existing CSV data
 - Use Docker Compose for service orchestration
 - **Enable charting and trend analysis** through SQL queries and visualization tools
+- **Utilize per-pair timestamps from API** to avoid storing redundant unchanged rates
+
+---
+
+## 1.1 Critical API Discovery: Per-Pair Timestamps
+
+**Issue Context**: During initial planning (PR #29), the implementation plan didn't account for a critical feature of the Monobank API: **each currency pair has its own `date` timestamp** (Unix time format) indicating when that specific rate was last updated.
+
+**Analysis of Actual API Response**:
+
+Examining a real Monobank API response reveals significant timestamp variation:
+
+```json
+[
+  {"currencyCodeA":840,"currencyCodeB":980,"date":1764576373,"rateBuy":42.14,"rateSell":42.5405},
+  {"currencyCodeA":978,"currencyCodeB":980,"date":1764595273,"rateBuy":48.85,"rateSell":49.5},
+  {"currencyCodeA":971,"currencyCodeB":980,"date":1764367205,"rateCross":0.6365},
+  {"currencyCodeA":68,"currencyCodeB":980,"date":1764242111,"rateCross":6.2014}
+]
+```
+
+In this single API response:
+- USD/UAH (840/980): timestamp `1764576373` (recent)
+- EUR/UAH (978/980): timestamp `1764595273` (18,900 seconds = ~5.25 hours newer than USD)
+- AFN/UAH (971/980): timestamp `1764367205` (252,000 seconds = ~70 hours old!)
+- BOB/UAH (68/980): timestamp `1764242111` (377,162 seconds = ~104.8 hours = ~4.4 days old!)
+
+**Key Findings**:
+1. **Timestamps vary widely**: From "just updated" to multiple days old in the same response
+2. **Update frequency differs by pair**:
+   - Major pairs (USD, EUR, PLN to UAH): Update every few minutes
+   - Popular pairs: Update hourly
+   - Exotic currencies: May update once per day or less
+3. **Polling vs. actual updates**: If we poll every 5 minutes but a rate hasn't changed in days, we'd redundantly store the same rate 288 times per day
+
+**Implementation Impact**:
+
+This discovery fundamentally changes the storage strategy:
+
+| Approach | Storage Behavior | 5-Year Estimate |
+|----------|------------------|-----------------|
+| **Naive** (ignore timestamps) | Store all ~100 pairs every 5 minutes | ~68.5M records, ~5-7 GB |
+| **Optimized** (use per-pair timestamps) | Store only when rate actually changes | ~31.5M records, ~2.5-3.2 GB |
+
+**Benefits of timestamp-aware storage**:
+- **40-60% storage reduction**: Avoid redundant unchanged rates
+- **Accurate historical data**: Timestamps reflect actual rate updates, not arbitrary polling times
+- **Better analytics**: Queries show real rate changes, not polling artifacts
+- **Efficient queries**: Smaller dataset, faster performance
+- **Monitoring capability**: Can detect stale rates (pairs not updated in X hours)
+
+This revised plan incorporates per-pair timestamp handling throughout the schema design, implementation phases, and query examples.
 
 ---
 
@@ -34,15 +87,46 @@ The goal is to replace/extend the current CSV-based logging with a time-series d
 
 The Monobank API returns approximately **100+ currency pairs** per request. To future-proof the database, we will store ALL available rates, not just the currently displayed currencies (USD, EUR, PLN).
 
+#### Critical Discovery: Per-Pair Timestamps
+
+**The Monobank API provides individual `date` timestamps for each currency pair**, not a single timestamp for the entire response. Analysis of actual API responses reveals:
+
+- **Timestamp variation**: Currency pairs have different timestamps, with age differences ranging from seconds to multiple days
+- **Update frequency patterns**:
+  - **High-frequency pairs** (e.g., USD/UAH, EUR/UAH, PLN/UAH): Updated within minutes, reflecting active trading
+  - **Low-frequency pairs** (e.g., exotic currencies): May be 1-4+ days old, indicating infrequent updates
+  - Example: In a single API response, timestamps ranged from "just now" to 4.4 days old
+
+#### Revised Storage Strategy
+
+Instead of blindly storing all ~100 pairs every 5 minutes, we leverage **database constraints for automatic deduplication**:
+
+1. **Insert all rates from API**: Use `INSERT OR IGNORE` to attempt inserting all rates
+2. **UNIQUE constraint handles deduplication**: `(source, currency_code_a, currency_code_b, api_timestamp)` constraint automatically prevents duplicate entries
+3. **SQLite efficiently ignores duplicates**: No pre-filtering needed; database handles it at insert time
+
+This approach significantly reduces redundant storage while keeping implementation simple:
+- **High-frequency pairs**: Inserted frequently as their `api_timestamp` changes
+- **Low-frequency pairs**: Automatically ignored if their `api_timestamp` hasn't changed
+- **No additional complexity**: No in-memory cache, no pre-checks, survives container restarts
+- **Estimated reduction**: 40-60% fewer stored records for infrequently-updated pairs
+
+#### Updated Volume Estimation
+
 - **Currency pairs per API call**: ~100 (Monobank) + ~30 (NBU) = ~130 rates
 - **Polling interval**: 5 minutes (configurable, 15s-3600s)
-- **Records per day**: 288 intervals × 130 rates = ~37,440 records
-- **Records per year**: ~13.7 million
-- **5-year storage**: ~68.5 million records
+- **Effective records per day** (with timestamp-based deduplication):
+  - High-frequency pairs (~20): 288 intervals × 20 = ~5,760 records
+  - Medium-frequency pairs (~40): ~60 intervals × 40 = ~2,400 records  
+  - Low-frequency pairs (~40): ~12 intervals × 40 = ~480 records
+  - NBU rates (~30): ~288 intervals × 30 = ~8,640 records (NBU updates once daily, but we poll every 5 min)
+  - **Total per day**: ~17,280 records (vs. 37,440 without optimization)
+- **Records per year**: ~6.3 million (vs. 13.7 million without optimization)
+- **5-year storage**: ~31.5 million records (vs. 68.5 million)
 - **Record size**: ~80-100 bytes per record
-- **Total storage**: ~5-7 GB for 5 years of complete data
+- **Total storage**: ~2.5-3.2 GB for 5 years (vs. ~5-7 GB without optimization)
 
-**Note**: Even with this larger data volume, SQLite remains suitable as it efficiently handles databases up to 281 TB and the query patterns (time-range filters with indexed columns) are optimal for SQLite.
+**Note**: SQLite remains highly suitable for this volume. The constraint-based approach provides accurate historical data (reflects actual rate update times) while keeping implementation simple and reliable across container restarts.
 
 ### Database Comparison
 
@@ -260,14 +344,15 @@ INSERT OR IGNORE INTO currencies (code, alpha_code, name) VALUES
 ```sql
 CREATE TABLE IF NOT EXISTS exchange_rates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp DATETIME NOT NULL,
-    source TEXT NOT NULL,           -- 'monobank', 'nbu'
-    currency_code_a INTEGER NOT NULL,  -- ISO 4217 numeric code (e.g., 840 for USD)
-    currency_code_b INTEGER NOT NULL,  -- ISO 4217 numeric code (e.g., 980 for UAH)
-    rate_buy REAL,                  -- Buy rate (NULL if not available)
-    rate_sell REAL,                 -- Sell rate (NULL if not available)
-    rate_cross REAL,                -- Cross rate (NULL if not available)
-    UNIQUE(timestamp, source, currency_code_a, currency_code_b),
+    timestamp DATETIME NOT NULL,        -- When we fetched this rate from the API (our polling time)
+    api_timestamp INTEGER NOT NULL,     -- Unix timestamp from the API's 'date' field (when rate was actually updated)
+    source TEXT NOT NULL,               -- 'monobank', 'nbu'
+    currency_code_a INTEGER NOT NULL,   -- ISO 4217 numeric code (e.g., 840 for USD)
+    currency_code_b INTEGER NOT NULL,   -- ISO 4217 numeric code (e.g., 980 for UAH)
+    rate_buy REAL,                      -- Buy rate (NULL if not available)
+    rate_sell REAL,                     -- Sell rate (NULL if not available)
+    rate_cross REAL,                    -- Cross rate (NULL if not available)
+    UNIQUE(source, currency_code_a, currency_code_b, api_timestamp),
     FOREIGN KEY (currency_code_a) REFERENCES currencies(code),
     FOREIGN KEY (currency_code_b) REFERENCES currencies(code)
 );
@@ -276,10 +361,27 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
 PRAGMA foreign_keys = ON;
 
 CREATE INDEX idx_rates_timestamp ON exchange_rates(timestamp);
-CREATE INDEX idx_rates_currency_pair ON exchange_rates(currency_code_a, currency_code_b, timestamp);
-CREATE INDEX idx_rates_source ON exchange_rates(source, timestamp);
-CREATE INDEX idx_rates_currency_a ON exchange_rates(currency_code_a, timestamp);
+CREATE INDEX idx_rates_api_timestamp ON exchange_rates(api_timestamp);
+CREATE INDEX idx_rates_currency_pair ON exchange_rates(currency_code_a, currency_code_b, api_timestamp);
+CREATE INDEX idx_rates_source ON exchange_rates(source, api_timestamp);
+CREATE INDEX idx_rates_currency_a ON exchange_rates(currency_code_a, api_timestamp);
 ```
+
+**Key Design Decisions**:
+
+1. **Dual Timestamp Approach**:
+   - `timestamp`: When we polled the API (for debugging/audit purposes)
+   - `api_timestamp`: When the rate was actually updated according to Monobank (the authoritative time)
+   
+2. **Unique Constraint**: `(source, currency_code_a, currency_code_b, api_timestamp)`
+   - Prevents duplicate rates for the same currency pair with the same API timestamp
+   - Allows idempotent inserts (re-running won't create duplicates)
+   - Uses `api_timestamp` instead of our polling `timestamp` to accurately represent rate changes
+
+3. **Automatic Deduplication Strategy**:
+   - Use `INSERT OR IGNORE` to handle duplicate timestamps gracefully
+   - The UNIQUE constraint automatically prevents storing the same rate multiple times
+   - No additional change detection logic needed - SQLite handles it efficiently
 
 **Note**: SQLite foreign key constraints are optional for this use case since:
 1. Currency codes come directly from the API (trusted source)
@@ -288,84 +390,119 @@ CREATE INDEX idx_rates_currency_a ON exchange_rates(currency_code_a, timestamp);
 
 ### 4.3 Schema Benefits
 - **Stores ALL rates**: Every currency pair from the API is captured
-- **Efficient storage**: Single row per currency pair per timestamp (buy, sell, cross in one row)
+- **Efficient storage**: Single row per currency pair per unique rate update (buy, sell, cross in one row)
+- **Timestamp accuracy**: Uses API-provided timestamps to reflect actual rate update times
+- **Deduplication**: Automatic prevention of storing unchanged rates multiple times
 - **Normalized**: Currency metadata stored separately for easy lookup
 - **Flexible**: Supports any currency pair combination
 - **ISO 4217 compliant**: Uses standard numeric currency codes
 - **Queryable**: Efficient time-range and currency-specific queries
-- **Unique Constraint**: Prevents duplicate entries (idempotent inserts)
+- **Unique Constraint**: Prevents duplicate entries based on actual rate update time (idempotent inserts)
+- **Storage optimization**: 40-60% reduction in database size by avoiding redundant unchanged rates
 
 ### 4.4 Example Queries
 
 ```sql
--- Get latest USD/UAH rates (using currency codes)
-SELECT e.*, c1.alpha_code as from_currency, c2.alpha_code as to_currency
+-- Get latest USD/UAH rates (using currency codes and actual update times)
+SELECT e.*, c1.alpha_code as from_currency, c2.alpha_code as to_currency,
+       datetime(e.api_timestamp, 'unixepoch') as rate_updated_at
 FROM exchange_rates e
 JOIN currencies c1 ON e.currency_code_a = c1.code
 JOIN currencies c2 ON e.currency_code_b = c2.code
 WHERE e.currency_code_a = 840 AND e.currency_code_b = 980  -- USD to UAH
-ORDER BY e.timestamp DESC LIMIT 10;
+ORDER BY e.api_timestamp DESC LIMIT 10;
 
--- Get all available currency pairs
+-- Get all available currency pairs with their latest update times
 SELECT DISTINCT 
     c1.alpha_code as from_currency, 
     c2.alpha_code as to_currency,
+    MAX(e.api_timestamp) as last_updated_unix,
+    datetime(MAX(e.api_timestamp), 'unixepoch') as last_updated_datetime,
     COUNT(*) as data_points
 FROM exchange_rates e
 JOIN currencies c1 ON e.currency_code_a = c1.code
 JOIN currencies c2 ON e.currency_code_b = c2.code
 GROUP BY e.currency_code_a, e.currency_code_b
-ORDER BY data_points DESC;
+ORDER BY last_updated_unix DESC;
 
--- Get daily average EUR/UAH sell rate
-SELECT DATE(timestamp) as day, AVG(rate_sell) as avg_sell_rate
+-- Get daily average EUR/UAH sell rate (using actual rate update times)
+SELECT DATE(api_timestamp, 'unixepoch') as day, AVG(rate_sell) as avg_sell_rate
 FROM exchange_rates 
 WHERE currency_code_a = 978 AND currency_code_b = 980  -- EUR to UAH
-GROUP BY DATE(timestamp)
+GROUP BY DATE(api_timestamp, 'unixepoch')
 ORDER BY day DESC;
 
--- Get rate history for past 24 hours (all currencies to UAH)
-SELECT e.timestamp, c.alpha_code as currency, e.rate_buy, e.rate_sell, e.rate_cross
+-- Get rate history for past 24 hours (all currencies to UAH, using actual update times)
+SELECT e.api_timestamp, 
+       datetime(e.api_timestamp, 'unixepoch') as rate_updated_at,
+       c.alpha_code as currency, 
+       e.rate_buy, e.rate_sell, e.rate_cross
 FROM exchange_rates e
 JOIN currencies c ON e.currency_code_a = c.code
 WHERE e.currency_code_b = 980  -- To UAH
-  AND e.timestamp >= datetime('now', '-24 hours')
-ORDER BY e.timestamp DESC, c.alpha_code;
+  AND e.api_timestamp >= unixepoch('now', '-24 hours')
+ORDER BY e.api_timestamp DESC, c.alpha_code;
+
+-- Identify stale rates (not updated in last 24 hours) - useful for monitoring
+SELECT c1.alpha_code as from_currency,
+       c2.alpha_code as to_currency,
+       MAX(e.api_timestamp) as last_update_unix,
+       datetime(MAX(e.api_timestamp), 'unixepoch') as last_update_time,
+       (unixepoch('now') - MAX(e.api_timestamp)) / 3600.0 as hours_since_update
+FROM exchange_rates e
+JOIN currencies c1 ON e.currency_code_a = c1.code
+JOIN currencies c2 ON e.currency_code_b = c2.code
+WHERE e.source = 'monobank'
+GROUP BY e.currency_code_a, e.currency_code_b
+HAVING hours_since_update > 24
+ORDER BY hours_since_update DESC;
+
+-- Compare our polling time vs API update time (for debugging)
+SELECT currency_code_a, currency_code_b,
+       datetime(timestamp) as our_poll_time,
+       datetime(api_timestamp, 'unixepoch') as api_update_time,
+       (unixepoch(timestamp) - api_timestamp) as lag_seconds
+FROM exchange_rates
+WHERE source = 'monobank'
+ORDER BY timestamp DESC
+LIMIT 20;
 ```
 
 ### 4.5 Analytics & Trend Analysis Queries
 
-The schema supports various analytical queries for charting and trend analysis:
+The schema supports various analytical queries for charting and trend analysis. All queries use `api_timestamp` for accurate representation of when rates actually changed:
 
 ```sql
 -- Daily min/max/avg rates for USD/UAH (for candlestick-style charts)
+-- Uses api_timestamp to reflect actual rate update times
 SELECT 
-    DATE(timestamp) as day,
+    DATE(api_timestamp, 'unixepoch') as day,
     MIN(rate_sell) as min_rate,
     MAX(rate_sell) as max_rate,
     AVG(rate_sell) as avg_rate,
     (SELECT rate_sell FROM exchange_rates e2 
-     WHERE DATE(e2.timestamp) = DATE(e1.timestamp) 
+     WHERE DATE(e2.api_timestamp, 'unixepoch') = DATE(e1.api_timestamp, 'unixepoch')
      AND e2.currency_code_a = e1.currency_code_a 
      AND e2.currency_code_b = e1.currency_code_b 
-     ORDER BY e2.timestamp ASC LIMIT 1) as open_rate,
+     ORDER BY e2.api_timestamp ASC LIMIT 1) as open_rate,
     (SELECT rate_sell FROM exchange_rates e2 
-     WHERE DATE(e2.timestamp) = DATE(e1.timestamp) 
+     WHERE DATE(e2.api_timestamp, 'unixepoch') = DATE(e1.api_timestamp, 'unixepoch')
      AND e2.currency_code_a = e1.currency_code_a 
      AND e2.currency_code_b = e1.currency_code_b 
-     ORDER BY e2.timestamp DESC LIMIT 1) as close_rate
+     ORDER BY e2.api_timestamp DESC LIMIT 1) as close_rate
 FROM exchange_rates e1
 WHERE currency_code_a = 840 AND currency_code_b = 980  -- USD/UAH
   AND source = 'monobank'
-GROUP BY DATE(timestamp);
+GROUP BY DATE(api_timestamp, 'unixepoch');
 
--- Weekly trend analysis for multiple currencies
+-- Weekly trend analysis for multiple currencies (using actual update times)
 SELECT 
-    strftime('%Y-W%W', timestamp) as week,
+    strftime('%Y-W%W', datetime(api_timestamp, 'unixepoch')) as week,
     c.alpha_code as currency,
     AVG(rate_sell) as avg_rate,
     MIN(rate_sell) as min_rate,
-    MAX(rate_sell) as max_rate
+    MAX(rate_sell) as max_rate,
+    COUNT(*) as update_count
 FROM exchange_rates e
 JOIN currencies c ON e.currency_code_a = c.code
 WHERE e.source = 'monobank' 
@@ -384,7 +521,7 @@ SELECT
     COUNT(*) as data_points
 FROM exchange_rates e
 JOIN currencies c ON e.currency_code_a = c.code
-WHERE e.timestamp >= datetime('now', '-30 days')
+WHERE e.api_timestamp >= unixepoch('now', '-30 days')
   AND e.currency_code_b = 980
   AND e.rate_sell IS NOT NULL
 GROUP BY e.currency_code_a
@@ -392,7 +529,7 @@ ORDER BY range DESC;
 
 -- Spread analysis (buy vs sell difference) for major currencies
 SELECT 
-    DATE(e.timestamp) as day,
+    DATE(e.api_timestamp, 'unixepoch') as day,
     c.alpha_code as currency,
     AVG(e.rate_sell) as avg_sell,
     AVG(e.rate_buy) as avg_buy,
@@ -409,7 +546,7 @@ ORDER BY day DESC, currency;
 
 -- Compare Monobank vs NBU rates for USD
 SELECT 
-    DATE(timestamp) as day,
+    DATE(api_timestamp, 'unixepoch') as day,
     AVG(CASE WHEN source = 'monobank' THEN rate_sell END) as monobank_sell,
     AVG(CASE WHEN source = 'nbu' THEN COALESCE(rate_cross, rate_sell) END) as nbu_official,
     AVG(CASE WHEN source = 'monobank' THEN rate_sell END) - 
@@ -421,22 +558,24 @@ HAVING monobank_sell IS NOT NULL AND nbu_official IS NOT NULL
 ORDER BY day DESC;
 
 -- Moving average (7-day rolling average) for EUR/UAH
+-- Note: This query uses actual rate update times, so window size may vary
 SELECT 
-    timestamp,
+    api_timestamp,
+    datetime(api_timestamp, 'unixepoch') as update_time,
     rate_sell,
     AVG(rate_sell) OVER (
-        ORDER BY timestamp 
-        ROWS BETWEEN 2016 PRECEDING AND CURRENT ROW  -- 7 days × 24 hours × 12 intervals/hour = 2016 rows
+        ORDER BY api_timestamp 
+        ROWS BETWEEN 2016 PRECEDING AND CURRENT ROW  -- Approximate 7 days of 5-min intervals
     ) as moving_avg_7d
 FROM exchange_rates
 WHERE source = 'monobank' 
   AND currency_code_a = 978 
   AND currency_code_b = 980
-ORDER BY timestamp DESC;
+ORDER BY api_timestamp DESC;
 
 -- Cross-currency analysis (EUR/USD rate)
 SELECT 
-    DATE(timestamp) as day,
+    DATE(api_timestamp, 'unixepoch') as day,
     AVG(rate_buy) as avg_buy,
     AVG(rate_sell) as avg_sell,
     AVG((rate_buy + rate_sell) / 2) as mid_rate
@@ -455,13 +594,33 @@ SELECT
     (MAX(e.rate_sell) - MIN(e.rate_sell)) / AVG(e.rate_sell) * 100 as volatility_percent
 FROM exchange_rates e
 JOIN currencies c ON e.currency_code_a = c.code
-WHERE e.timestamp >= datetime('now', '-7 days')
+WHERE e.api_timestamp >= unixepoch('now', '-7 days')
   AND e.currency_code_b = 980
   AND e.rate_sell IS NOT NULL
 GROUP BY e.currency_code_a
 HAVING COUNT(*) > 100  -- Ensure enough data points
 ORDER BY volatility_percent DESC
 LIMIT 10;
+
+-- Update frequency analysis (how often each pair actually changes)
+-- This helps understand which pairs are high vs low frequency
+SELECT 
+    c1.alpha_code || '/' || c2.alpha_code as pair,
+    COUNT(*) as total_updates,
+    MIN(api_timestamp) as first_seen,
+    MAX(api_timestamp) as last_seen,
+    datetime(MIN(api_timestamp), 'unixepoch') as first_seen_dt,
+    datetime(MAX(api_timestamp), 'unixepoch') as last_seen_dt,
+    (MAX(api_timestamp) - MIN(api_timestamp)) / 3600.0 as span_hours,
+    COUNT(*) / ((MAX(api_timestamp) - MIN(api_timestamp)) / 3600.0) as updates_per_hour
+FROM exchange_rates e
+JOIN currencies c1 ON e.currency_code_a = c1.code
+JOIN currencies c2 ON e.currency_code_b = c2.code
+WHERE source = 'monobank'
+  AND api_timestamp >= unixepoch('now', '-7 days')
+GROUP BY e.currency_code_a, e.currency_code_b
+HAVING span_hours > 1  -- Filter out very new pairs
+ORDER BY updates_per_hour DESC;
 ```
 
 ---
@@ -473,9 +632,9 @@ LIMIT 10;
 
 1. Create SQLite database module (`bot/database.py`)
    - Database initialization
-   - Schema creation
+   - Schema creation with dual timestamp fields (`timestamp` and `api_timestamp`)
    - Connection management
-   - CRUD operations
+   - CRUD operations using `INSERT OR IGNORE` for automatic deduplication
 
 2. Update Docker Compose configuration
    - Add volume mount for database file
@@ -489,9 +648,11 @@ LIMIT 10;
 **Priority: High | Effort: Medium**
 
 1. Update `get_exchange_rates()` function
-   - Add database insertion after fetching rates
+   - Extract `date` field from each currency pair in Monobank API response
+   - Use `INSERT OR IGNORE` to handle duplicate timestamps automatically
+   - Add database insertion for all rates (UNIQUE constraint prevents duplicates)
    - Implement error handling for database operations
-   - Ensure both Monobank and NBU rates are stored
+   - Ensure both Monobank and NBU rates are stored (NBU doesn't provide per-rate timestamps, so use polling time)
 
 2. Maintain backward compatibility
    - CSV logging continues to work when `LOG_RATE=True`
@@ -500,7 +661,12 @@ LIMIT 10;
 
 3. Add data validation
    - Validate rates before insertion
-   - Handle duplicate entries gracefully
+   - Let UNIQUE constraint handle duplicate entries automatically
+   - Log statistics on how many rates were successfully inserted vs. ignored (duplicates)
+
+4. Optimize for efficiency
+   - Batch insert all rates in a single transaction using `INSERT OR IGNORE`
+   - SQLite's UNIQUE constraint efficiently handles deduplication without additional logic
 
 ### Phase 3: CSV Migration Script (Issue #21 - Updated)
 **Priority: Medium | Effort: Medium**
@@ -540,21 +706,35 @@ LIMIT 10;
 ## 6. Updated Subtask Definitions
 
 ### Issue #19: Add storing of exchange rates to database
-**Updated Title**: Add SQLite database storage for ALL exchange rates
+**Updated Title**: Add SQLite database storage for ALL exchange rates with timestamp-based deduplication
 
 **Updated Description**:
-Implement SQLite-based storage for ALL exchange rates fetched from Monobank and NBU APIs. Store complete API responses to enable future analysis of any currency pair.
+Implement SQLite-based storage for ALL exchange rates fetched from Monobank and NBU APIs. Store complete API responses with proper timestamp handling to enable future analysis of any currency pair while avoiding redundant storage of unchanged rates.
+
+**Key Implementation Detail**: 
+The Monobank API provides individual `date` timestamps (Unix time) for each currency pair. These timestamps indicate when each specific rate was last updated by Monobank, and they vary significantly between pairs (some pairs update every few minutes, others only every few days). We must use these per-pair timestamps to:
+1. Track the actual update time of each rate (not just our polling time)
+2. Avoid storing duplicate unchanged rates across multiple API polls
+3. Reduce database size by 40-60% through intelligent deduplication
 
 **Acceptance Criteria**:
 - [ ] Create `bot/database.py` module with SQLite operations
 - [ ] Implement database schema with:
   - `currencies` table for ISO 4217 currency code lookup
-  - `exchange_rates` table for all rate data
-- [ ] Update `get_exchange_rates()` to store ALL rates from API response when `DB_ENABLED=True`
+  - `exchange_rates` table with dual timestamps:
+    - `timestamp`: Our polling time (for audit/debug)
+    - `api_timestamp`: API's `date` field (authoritative update time)
+- [ ] Extract `date` field from each currency pair in Monobank API response
+- [ ] Implement automatic deduplication using database constraints:
+  - Use `INSERT OR IGNORE` to handle duplicates gracefully
+  - UNIQUE constraint on `(source, currency_code_a, currency_code_b, api_timestamp)` prevents duplicate rates
+  - No additional in-memory cache or pre-check logic needed
+- [ ] Update `get_exchange_rates()` to store ALL rates from API when `DB_ENABLED=True`
 - [ ] Store complete Monobank API response (~100 currency pairs per call)
 - [ ] Store complete NBU API response (~30 currencies per call)
 - [ ] Store rate_buy, rate_sell, and rate_cross in a single row per currency pair
-- [ ] Handle duplicate entries gracefully (use UPSERT or ignore)
+- [ ] Batch insert all rates in a single transaction using `INSERT OR IGNORE`
+- [ ] Log statistics: total pairs processed, new rates inserted, duplicate rates ignored
 - [ ] Maintain backward compatibility with CSV logging (CSV still logs only USD, EUR, PLN)
 - [ ] Add `DB_ENABLED` and `DB_PATH` environment variables
 - [ ] Update `.env.example` with new configuration options
@@ -564,8 +744,17 @@ Implement SQLite-based storage for ALL exchange rates fetched from Monobank and 
 - Store database in `/bot/data/exchange_rates.db` (configurable)
 - Enable WAL mode for better concurrent access
 - Use ISO 4217 numeric currency codes from API directly
-- Batch insert all rates in a single transaction for performance
-- Add appropriate indexes for time-range and currency-pair queries
+- Use `INSERT OR IGNORE` for idempotent inserts - SQLite automatically ignores duplicates based on UNIQUE constraint
+- Example insert pattern:
+  ```python
+  cursor.executemany(
+      "INSERT OR IGNORE INTO exchange_rates (timestamp, api_timestamp, source, currency_code_a, currency_code_b, rate_buy, rate_sell, rate_cross) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      rate_data
+  )
+  ```
+- Track insert success using `cursor.rowcount` to log statistics (rows actually inserted vs. ignored)
+- Add appropriate indexes for time-range and currency-pair queries on both `timestamp` and `api_timestamp`
+- For NBU rates, use current polling time as `api_timestamp` since NBU doesn't provide per-rate timestamps
 
 ---
 
@@ -825,12 +1014,33 @@ The recommended approach uses SQLite as an embedded time-series database, provid
 - **Docker Compose ready**: Prepared for future service additions
 - **Analytics-ready**: Rich SQL query support for trend analysis, aggregations, and charting
 - **Visualization-ready**: Compatible with Grafana and Python data analysis tools (pandas, matplotlib)
-- **Scalable**: Handles millions of records efficiently (estimated ~68M records over 5 years)
+- **Scalable**: Handles millions of records efficiently (estimated ~31.5M records over 5 years with optimization)
+- **Intelligent deduplication**: Uses API-provided per-pair timestamps with database constraints
+  - **40-60% storage reduction**: Only stores rates when they actually change
+  - **Accurate timestamps**: Records actual rate update times, not just polling times
+  - **Simple & reliable**: `INSERT OR IGNORE` with UNIQUE constraint - no in-memory state, survives restarts
+  - **Efficient queries**: Dual timestamp fields enable both audit trails and accurate time-series analysis
+- **Update frequency awareness**: Automatically adapts to different update patterns (high-frequency pairs like USD/UAH vs. low-frequency exotic currencies)
 
-This plan maintains the project's lightweight nature while significantly improving data storage, querying, and analysis capabilities for all available currencies.
+### Key Innovation: Per-Pair Timestamp Utilization
+
+The critical insight from analyzing the actual Monobank API is that **each currency pair has its own `date` timestamp**, reflecting when that specific rate was last updated. This varies significantly:
+
+- **High-frequency pairs** (USD/UAH, EUR/UAH, PLN/UAH): Updated every few minutes
+- **Medium-frequency pairs**: Updated hourly or several times per day  
+- **Low-frequency pairs** (exotic currencies): Updated once per day or less frequently
+
+By using these per-pair timestamps with database constraints, we:
+1. **Reduce storage by 40-60%**: Don't store redundant unchanged rates
+2. **Improve data accuracy**: Record the actual update time, not our arbitrary polling time
+3. **Enable better analytics**: Queries reflect real rate changes, not polling artifacts
+4. **Keep it simple**: Database handles deduplication automatically - no in-memory cache, no complex logic
+5. **Ensure reliability**: Works correctly across container restarts and failures
+
+This plan maintains the project's lightweight nature while significantly improving data storage, querying, and analysis capabilities for all available currencies, with smart optimization based on actual API behavior.
 
 ---
 
 *Document created: December 2025*
-*Last updated: December 2025*
+*Last updated: December 2025 (Revised to incorporate per-pair timestamp optimization)*
 *Related issues: #18, #19, #20, #21*
