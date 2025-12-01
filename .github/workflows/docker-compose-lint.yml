@@ -1,0 +1,25 @@
+name: Lint Docker Compose
+
+on:
+  push:
+    branches:
+      - main
+      - 'dev*'
+  pull_request:
+    branches:
+      - main
+      - 'dev*'
+
+jobs:
+  lint-docker-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+
+      - name: Lint docker-compose.yml
+        uses: zavoloklom/docker-compose-linter@v1.0.0
+        with:
+          file: docker-compose.yml

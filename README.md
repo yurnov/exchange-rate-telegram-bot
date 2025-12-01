@@ -120,9 +120,54 @@ Alternatively, provide the token directly as an environment variable:
 docker run --rm -d -e BOT_TOKEN="your_bot_token" ghcr.io/yurnov/xratebot:latest
 ```
 
+### Option 3: Use Docker Compose (Recommended)
+
+Docker Compose provides a convenient way to manage the bot with persistent data storage.
+
+1. Create a `.env` file with your bot token (use `.env.example` as template):
+
+```bash
+cp .env.example .env
+# Edit .env and add your BOT_TOKEN
+```
+
+2. Create a `data` directory for persistent storage:
+
+```bash
+mkdir -p data
+```
+
+3. Start the bot using Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+4. View logs:
+
+```bash
+docker compose logs -f bot
+```
+
+5. Stop the bot:
+
+```bash
+docker compose down
+```
+
+The Docker Compose configuration automatically:
+- Mounts the `./data` directory to persist database and CSV files
+- Loads environment variables from `.env` file
+- Restarts the container automatically unless manually stopped
+- Includes a health check to monitor bot status
+
 ### Running with CSV Logging
 
-When exchange rate logging is enabled (`LOG_RATE=True`), mount a CSV file to persist data:
+When exchange rate logging is enabled (`LOG_RATE=True`), the bot will save exchange rates to a CSV file.
+
+**With Docker Compose:** The `./data` directory is already mounted, so CSV files will be automatically persisted in `./data/exchange_rates.csv`.
+
+**With standalone Docker:** Mount a CSV file to persist data:
 
 ```bash
 touch exchange_rates.csv
@@ -132,7 +177,7 @@ docker run --rm -d \
   ghcr.io/yurnov/xratebot:latest
 ```
 
-### Option 3: Try the Live Bot
+### Option 4: Try the Live Bot
 
 Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rate_bot)
 

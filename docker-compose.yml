@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  bot:
+    image: ghcr.io/yurnov/xratebot:latest
+    container_name: exchange-rate-bot
+    env_file: .env
+    volumes:
+      - ./data:/bot/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
