@@ -14,7 +14,9 @@ A lightweight [Telegram bot](https://core.telegram.org/bots/api) running in a Do
 - **Multiple Data Sources**: Compare rates from Monobank (buy/sell) and NBU (official)
 - **Currency Converter**: Built-in calculator for currency conversions
 - **Automatic Updates**: Configurable rate refresh interval (15-3600 seconds)
-- **CSV Logging**: Optional logging of exchange rates with timestamps
+- **Historical Data Storage**: Optional SQLite database for storing ALL exchange rates (100+ currency pairs)
+- **CSV Logging**: Optional CSV logging for backward compatibility (USD, EUR, PLN only)
+- **Data Migration**: Script to migrate existing CSV data to database
 - **Minimal Configuration**: Only requires a bot token to get started
 - **Docker-Ready**: Runs in a lightweight container based on Python 3.14-slim
 
@@ -69,17 +71,34 @@ Alternatively, provide `BOT_TOKEN` as an environment variable when running the c
 |----------|-------------|---------|-------------|
 | `PULL_INTERVAL` | Rate update interval in seconds | `300` | `15-3600` |
 | `LOG_RATE` | Enable CSV logging of exchange rates | `False` | `True/False` |
+| `DB_ENABLED` | Enable SQLite database logging | `False` | `True/False` |
+| `DB_PATH` | Path to SQLite database file | `data/exchange_rates.db` | File path |
 | `LOG_LEVEL` | Application logging level | `INFO` | `DEBUG/INFO/WARNING/ERROR/CRITICAL` |
 
 **Important**: Setting `PULL_INTERVAL` below 30 seconds is not recommended as it may trigger rate limiting from Monobank API (`{'errorDescription': 'Too many requests'}`).
 
-#### CSV Logging Format
+#### CSV Logging Format (Legacy)
 
 When `LOG_RATE=True`, the bot creates `exchange_rates.csv` with the following format:
 ```
 Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
 2025-11-30 10:15:30,41.20,41.60,43.50,44.00,10.25
 ```
+
+#### Database Storage (Recommended)
+
+When `DB_ENABLED=True`, the bot stores ALL exchange rates (100+ currency pairs from Monobank and NBU APIs) in a SQLite database. This enables:
+
+- **Comprehensive Data**: Stores all available currency pairs, not just USD, EUR, PLN
+- **Historical Analysis**: Query rates for any time period
+- **Trend Analysis**: Perform SQL queries for analytics and charting
+- **Data Export**: Easy export to CSV, JSON, or connect to Grafana
+
+**Database Schema**:
+- `currencies` table: ISO 4217 currency codes reference
+- `exchange_rates` table: Historical rates with timestamps
+
+**Storage Estimate**: ~7 GB for 5 years of complete data (~100 currency pairs, 5-minute intervals)
 
 
 ## Running
@@ -132,9 +151,117 @@ docker run --rm -d \
   ghcr.io/yurnov/xratebot:latest
 ```
 
-### Option 3: Try the Live Bot
+### Running with Database (Recommended for Data Analysis)
+
+When database logging is enabled (`DB_ENABLED=True`), mount a data directory to persist the database:
+
+```bash
+mkdir -p data
+docker run --rm -d \
+  --env-file .env \
+  -e DB_ENABLED=True \
+  -v ./data:/bot/data \
+  ghcr.io/yurnov/xratebot:latest
+```
+
+### Option 3: Using Docker Compose (Recommended)
+
+The easiest way to run the bot with persistent storage:
+
+```bash
+# Clone the repository
+git clone https://github.com/yurnov/exchange-rate-telegram-bot.git
+cd exchange-rate-telegram-bot
+
+# Create .env file with your configuration
+cp .env.example .env
+# Edit .env and set BOT_TOKEN, DB_ENABLED=True, etc.
+
+# Run with Docker Compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the bot
+docker-compose down
+```
+
+The `docker-compose.yml` file automatically mounts the `./data` directory for database persistence.
+
+### Option 4: Try the Live Bot
 
 Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rate_bot)
+
+## Data Migration
+
+If you have existing CSV data from previous bot versions, you can migrate it to the SQLite database.
+
+### Migration Script
+
+```bash
+# Basic migration
+python scripts/migrate_csv_to_db.py \
+  --csv-file exchange_rates.csv \
+  --db-file data/exchange_rates.db
+
+# Dry run (validate without inserting)
+python scripts/migrate_csv_to_db.py \
+  --csv-file exchange_rates.csv \
+  --db-file data/exchange_rates.db \
+  --dry-run
+
+# Verbose output
+python scripts/migrate_csv_to_db.py \
+  --csv-file exchange_rates.csv \
+  --db-file data/exchange_rates.db \
+  --verbose
+```
+
+**Features**:
+- Validates each CSV row before insertion
+- Skips malformed rows (common due to API failures)
+- Idempotent (re-runnable without duplicates)
+- Provides detailed migration statistics
+
+**Note**: The migration script only migrates USD, EUR, and PLN rates from the CSV. Going forward, the database will store all 100+ currency pairs automatically when `DB_ENABLED=True`.
+
+## Querying Historical Data
+
+Once the database is populated, you can query historical exchange rates using SQL:
+
+```bash
+# Connect to the database
+sqlite3 data/exchange_rates.db
+
+# Get latest USD/UAH rates
+SELECT e.timestamp, e.rate_buy, e.rate_sell, e.rate_cross
+FROM exchange_rates e
+WHERE e.currency_code_a = 840 AND e.currency_code_b = 980
+ORDER BY e.timestamp DESC LIMIT 10;
+
+# Get daily average rates for EUR/UAH
+SELECT DATE(timestamp) as day, 
+       AVG(rate_sell) as avg_sell_rate,
+       MIN(rate_sell) as min_rate,
+       MAX(rate_sell) as max_rate
+FROM exchange_rates 
+WHERE currency_code_a = 978 AND currency_code_b = 980
+  AND source = 'monobank'
+GROUP BY DATE(timestamp)
+ORDER BY day DESC;
+
+# List all available currency pairs
+SELECT DISTINCT c1.alpha_code || '/' || c2.alpha_code as pair,
+       COUNT(*) as data_points
+FROM exchange_rates e
+JOIN currencies c1 ON e.currency_code_a = c1.code
+JOIN currencies c2 ON e.currency_code_b = c2.code
+GROUP BY e.currency_code_a, e.currency_code_b
+ORDER BY data_points DESC;
+```
+
+For more complex queries and analytics examples, see [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
 ## Technical Details
 
@@ -142,9 +269,10 @@ Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rat
 
 - **Language**: Python 3.14
 - **Framework**: [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
+- **Database**: SQLite (built-in, no external dependencies)
 - **APIs**: 
-  - [Monobank API](https://api.monobank.ua/docs/) - for market exchange rates
-  - [NBU API](https://bank.gov.ua/ua/open-data/api-dev) - for official exchange rates
+  - [Monobank API](https://api.monobank.ua/docs/) - for market exchange rates (~100 currency pairs)
+  - [NBU API](https://bank.gov.ua/ua/open-data/api-dev) - for official exchange rates (~30 currencies)
 - **Scheduling**: Uses `schedule` library for periodic rate updates
 - **Configuration**: `python-dotenv` for environment management
 - **HTTP Client**: `requests` library
@@ -163,12 +291,20 @@ schedule
 ```
 exchange-rate-telegram-bot/
 ├── bot/
-│   └── main.py           # Main bot application
-├── .env.example          # Environment variables template
-├── Dockerfile            # Docker container definition
-├── CHANGELOG.md          # Version history
-├── LICENSE               # MIT License
-└── README.md            # This file
+│   ├── main.py              # Main bot application
+│   └── database.py          # SQLite database module
+├── scripts/
+│   └── migrate_csv_to_db.py # CSV to SQLite migration script
+├── docs/
+│   └── IMPLEMENTATION_PLAN.md # Database implementation details
+├── data/                    # Data directory (created on first run)
+│   └── exchange_rates.db    # SQLite database (when DB_ENABLED=True)
+├── .env.example             # Environment variables template
+├── docker-compose.yml       # Docker Compose configuration
+├── Dockerfile               # Docker container definition
+├── CHANGELOG.md             # Version history
+├── LICENSE                  # MIT License
+└── README.md               # This file
 ```
 
 ## Contributing
