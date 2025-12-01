@@ -86,11 +86,13 @@ def get_exchange_rates():
     if LOG_RATE:
         if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
             try:
-                with open("exchange_rates.csv", "a", encoding="utf-8") as file:
+                # Use data directory if it exists, otherwise use current directory
+                csv_path = "data/exchange_rates.csv" if os.path.exists("data") else "exchange_rates.csv"
+                with open(csv_path, "a", encoding="utf-8") as file:
                     file.write(
                         f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n'
                     )
-                logger.info("Exchange rates written to exchange_rates.csv")
+                logger.info(f"Exchange rates written to {csv_path}")
             except Exception as e:  # pylint: disable=broad-exception-caught
                 logger.error(f"Error writing to exchange_rates.csv: {str(e)}")
         else:
