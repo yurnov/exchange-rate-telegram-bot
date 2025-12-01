@@ -8,6 +8,7 @@ import re
 import schedule
 import time
 import threading
+from datetime import datetime
 from dotenv import load_dotenv
 
 from telegram import Update
@@ -18,6 +19,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
+from database import ExchangeRateDatabase
 
 MONOBANK_API_URL = "https://api.monobank.ua/bank/currency"
 NATIONAL_BANK_API_URL = "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
@@ -35,6 +38,8 @@ pln_rate_nbu = 0
 eur_usd_rate = 0
 eur_usd_rate_sell = 0
 LOG_RATE = False
+DB_ENABLED = False
+db = None
 
 # Enable initial logging
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -48,29 +53,35 @@ def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
 
     # pylint: disable=global-statement
-    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu, eur_usd_rate, eur_usd_rate_sell
+    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu, eur_usd_rate, eur_usd_rate_sell, db
     # pylint: disable=broad-except
+    
+    monobank_data = []
+    nbu_data = []
+    timestamp = datetime.now()
+    
     try:
         # Fetching exchange rates from Monobank API
         response = requests.get(MONOBANK_API_URL, timeout=10)
-        data = response.json()
-        usd_rate = next(item for item in data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)[
+        monobank_data = response.json()
+        
+        usd_rate = next(item for item in monobank_data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)[
             "rateBuy"
         ]
-        usd_rate_sell = next(item for item in data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)[
+        usd_rate_sell = next(item for item in monobank_data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980)[
             "rateSell"
         ]
-        eur_rate = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)[
+        eur_rate = next(item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)[
             "rateBuy"
         ]
-        eur_rate_sell = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)[
+        eur_rate_sell = next(item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980)[
             "rateSell"
         ]
-        pln_rate = next(item for item in data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980)[
+        pln_rate = next(item for item in monobank_data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980)[
             "rateCross"
         ]
         # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
-        eur_usd_item = next(item for item in data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840)
+        eur_usd_item = next(item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840)
         eur_usd_rate = eur_usd_item["rateBuy"]
         eur_usd_rate_sell = eur_usd_item["rateSell"]
 
@@ -99,13 +110,27 @@ def get_exchange_rates():
     try:
         # Fetching exchange rates from National Bank of Ukraine API
         response = requests.get(NATIONAL_BANK_API_URL, timeout=10)
-        data = response.json()
-        usd_rate_nbu = next(item for item in data if item["cc"] == "USD")["rate"]
-        eur_rate_nbu = next(item for item in data if item["cc"] == "EUR")["rate"]
-        pln_rate_nbu = next(item for item in data if item["cc"] == "PLN")["rate"]
+        nbu_data = response.json()
+        usd_rate_nbu = next(item for item in nbu_data if item["cc"] == "USD")["rate"]
+        eur_rate_nbu = next(item for item in nbu_data if item["cc"] == "EUR")["rate"]
+        pln_rate_nbu = next(item for item in nbu_data if item["cc"] == "PLN")["rate"]
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Error fetching exchange rates from NBU: {str(e)}")
+    
+    # Store ALL exchange rates in database if enabled
+    if DB_ENABLED and db:
+        try:
+            if monobank_data:
+                logger.info(f"Storing {len(monobank_data)} Monobank rates to database")
+                db.insert_exchange_rates(monobank_data, 'monobank', timestamp)
+            
+            if nbu_data:
+                logger.info(f"Storing {len(nbu_data)} NBU rates to database")
+                db.insert_exchange_rates(nbu_data, 'nbu', timestamp)
+                
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error(f"Error storing rates to database: {str(e)}")
 
 
 # pylint: disable=unused-argument
@@ -379,7 +404,7 @@ def run_schedule():
 def main() -> None:
 
     # pylint: disable=global-statement
-    global LOG_RATE
+    global LOG_RATE, DB_ENABLED, db
 
     # Load environment variables
     load_dotenv()
@@ -387,6 +412,8 @@ def main() -> None:
     PULL_INTERVAL = os.getenv("PULL_INTERVAL")
     LOG_RATE = os.getenv("LOG_RATE")
     LOG_LEVEL = os.getenv("LOG_LEVEL")
+    DB_ENABLED = os.getenv("DB_ENABLED")
+    DB_PATH = os.getenv("DB_PATH")
 
     if PULL_INTERVAL is None:
         logger.info("PULL_INTERVAL is not defined, using default value 300")
@@ -423,6 +450,30 @@ def main() -> None:
             "Format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, "
             + "PLN Exchange Rate"
         )
+    
+    # Check if database logging is enabled
+    if DB_ENABLED is None or DB_ENABLED.lower() not in ["true", "1", "yes"]:
+        DB_ENABLED = False
+        logger.info("DB_ENABLED is False or not defined, database logging is disabled.")
+    else:
+        DB_ENABLED = True
+        logger.info(f"DB_ENABLED is set to {DB_ENABLED}")
+        
+        # Initialize database
+        if DB_PATH is None or DB_PATH == "":
+            DB_PATH = "data/exchange_rates.db"
+            logger.info(f"DB_PATH not defined, using default: {DB_PATH}")
+        else:
+            logger.info(f"DB_PATH is set to {DB_PATH}")
+        
+        try:
+            db = ExchangeRateDatabase(DB_PATH)
+            db.connect()
+            logger.info("Database initialized successfully")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error(f"Error initializing database: {e}")
+            logger.error("Continuing without database logging")
+            DB_ENABLED = False
 
     # Get rate once and schedule the job to fetch exchange rates every 1 minute
     logger.info(f"Scheduling exchange rates fetching every {PULL_INTERVAL} seconds.")

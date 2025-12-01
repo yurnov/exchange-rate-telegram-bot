@@ -4,6 +4,11 @@ exchange_rates.csv
 chart-builder/data/*.csv
 chart-builder/data/*.png
 create_chart.sh
+# Database files
+data/
+*.db
+*.db-shm
+*.db-wal
 # Python
 *.pyc
 __pycache__/
