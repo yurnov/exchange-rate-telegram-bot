@@ -84,19 +84,19 @@ def get_exchange_rates():
     # Log exchange rates to CSV file
     # format of CSV file: Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
     if LOG_RATE:
+        # Use data directory if it exists, otherwise use current directory
+        csv_path = "data/exchange_rates.csv" if os.path.exists("data") else "exchange_rates.csv"
         if usd_rate != 0 or usd_rate_sell != 0 or eur_rate != 0 or eur_rate_sell != 0 or pln_rate != 0:
             try:
-                # Use data directory if it exists, otherwise use current directory
-                csv_path = "data/exchange_rates.csv" if os.path.exists("data") else "exchange_rates.csv"
                 with open(csv_path, "a", encoding="utf-8") as file:
                     file.write(
                         f'{time.strftime("%Y-%m-%d %H:%M:%S")},{usd_rate},{usd_rate_sell},{eur_rate},{eur_rate_sell},{pln_rate}\n'
                     )
                 logger.info(f"Exchange rates written to {csv_path}")
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error(f"Error writing to exchange_rates.csv: {str(e)}")
+                logger.error(f"Error writing to {csv_path}: {str(e)}")
         else:
-            logger.error("Exchange rates are not fetched, not writing to exchange_rates.csv")
+            logger.error(f"Exchange rates are not fetched, not writing to {csv_path}")
 
     try:
         # Fetching exchange rates from National Bank of Ukraine API
