@@ -23,6 +23,7 @@ The goal is to replace/extend the current CSV-based logging with a time-series d
 - Maintain backward compatibility with CSV logging
 - Support migration from existing CSV data
 - Use Docker Compose for service orchestration
+- **Enable charting and trend analysis** through SQL queries and visualization tools
 
 ---
 
@@ -55,6 +56,8 @@ The goal is to replace/extend the current CSV-based logging with a time-series d
 5. **Python Native Support**: Built-in `sqlite3` module, no additional dependencies
 6. **Simple Backup**: Single file database, easy to backup and migrate
 7. **Backward Compatible**: Can run alongside existing CSV logging
+8. **Analytics-Friendly**: Supports window functions, aggregations, and complex analytical queries for charting and trend analysis
+9. **Grafana Compatible**: Can be connected to Grafana via SQLite datasource plugin for visualization dashboards
 
 **Trade-offs:**
 - Not designed for high-concurrency writes (not a concern for this use case)
@@ -162,6 +165,98 @@ GROUP BY DATE(timestamp);
 -- Get rate history for past 24 hours
 SELECT * FROM exchange_rates 
 WHERE timestamp >= datetime('now', '-24 hours')
+ORDER BY timestamp DESC;
+```
+
+### 4.4 Analytics & Trend Analysis Queries
+
+The schema supports various analytical queries for charting and trend analysis:
+
+```sql
+-- Daily min/max/avg rates (for candlestick-style charts)
+SELECT 
+    DATE(timestamp) as day,
+    currency_code,
+    rate_type,
+    MIN(rate) as min_rate,
+    MAX(rate) as max_rate,
+    AVG(rate) as avg_rate,
+    (SELECT rate FROM exchange_rates e2 
+     WHERE DATE(e2.timestamp) = DATE(e1.timestamp) 
+     AND e2.currency_code = e1.currency_code 
+     AND e2.rate_type = e1.rate_type 
+     ORDER BY e2.timestamp ASC LIMIT 1) as open_rate,
+    (SELECT rate FROM exchange_rates e2 
+     WHERE DATE(e2.timestamp) = DATE(e1.timestamp) 
+     AND e2.currency_code = e1.currency_code 
+     AND e2.rate_type = e1.rate_type 
+     ORDER BY e2.timestamp DESC LIMIT 1) as close_rate
+FROM exchange_rates e1
+WHERE currency_code = 'USD' AND rate_type = 'sell'
+GROUP BY DATE(timestamp), currency_code, rate_type;
+
+-- Weekly trend analysis
+SELECT 
+    strftime('%Y-W%W', timestamp) as week,
+    currency_code,
+    AVG(rate) as avg_rate,
+    MIN(rate) as min_rate,
+    MAX(rate) as max_rate
+FROM exchange_rates
+WHERE source = 'monobank' AND rate_type = 'sell'
+GROUP BY week, currency_code
+ORDER BY week DESC;
+
+-- Rate volatility (standard deviation) by currency
+SELECT 
+    currency_code,
+    rate_type,
+    AVG(rate) as avg_rate,
+    MIN(rate) as min_rate,
+    MAX(rate) as max_rate,
+    MAX(rate) - MIN(rate) as range,
+    COUNT(*) as data_points
+FROM exchange_rates
+WHERE timestamp >= datetime('now', '-30 days')
+GROUP BY currency_code, rate_type;
+
+-- Spread analysis (buy vs sell difference)
+SELECT 
+    DATE(timestamp) as day,
+    currency_code,
+    AVG(CASE WHEN rate_type = 'sell' THEN rate END) as avg_sell,
+    AVG(CASE WHEN rate_type = 'buy' THEN rate END) as avg_buy,
+    AVG(CASE WHEN rate_type = 'sell' THEN rate END) - 
+    AVG(CASE WHEN rate_type = 'buy' THEN rate END) as spread
+FROM exchange_rates
+WHERE source = 'monobank' AND rate_type IN ('buy', 'sell')
+GROUP BY day, currency_code
+ORDER BY day DESC;
+
+-- Compare Monobank vs NBU rates
+SELECT 
+    DATE(timestamp) as day,
+    currency_code,
+    AVG(CASE WHEN source = 'monobank' AND rate_type = 'sell' THEN rate END) as monobank_sell,
+    AVG(CASE WHEN source = 'nbu' THEN rate END) as nbu_official,
+    AVG(CASE WHEN source = 'monobank' AND rate_type = 'sell' THEN rate END) - 
+    AVG(CASE WHEN source = 'nbu' THEN rate END) as difference
+FROM exchange_rates
+GROUP BY day, currency_code
+HAVING monobank_sell IS NOT NULL AND nbu_official IS NOT NULL;
+
+-- Moving average (7-day rolling average)
+SELECT 
+    timestamp,
+    currency_code,
+    rate,
+    AVG(rate) OVER (
+        PARTITION BY currency_code, rate_type 
+        ORDER BY timestamp 
+        ROWS BETWEEN 2016 PRECEDING AND CURRENT ROW  -- 7 days × 24 hours × 12 intervals/hour = 2016 rows
+    ) as moving_avg_7d
+FROM exchange_rates
+WHERE source = 'monobank' AND rate_type = 'sell'
 ORDER BY timestamp DESC;
 ```
 
@@ -421,12 +516,90 @@ Phase 1 (Issue #20) ──┬──▶ Phase 2 (Issue #19) ──▶ Phase 3 (Is
 
 These items are noted for potential future development but are not part of the current implementation plan:
 
-1. **Grafana Dashboard**: Visualize exchange rate trends
+1. **Grafana Dashboard**: Visualize exchange rate trends (see Section 11.1)
 2. **API Endpoint**: HTTP API to query historical rates
-3. **Data Export**: Export database to various formats
+3. **Data Export**: Export database to various formats (CSV, JSON, Excel)
 4. **Rate Alerts**: Notify users when rates cross thresholds
 5. **Extended Currency Support**: Add more currency pairs
 6. **InfluxDB Migration**: If horizontal scaling becomes necessary
+
+### 11.1 Grafana Integration (Future Phase)
+
+For charting and visualization, Grafana can be added to the Docker Compose stack:
+
+```yaml
+version: '3.8'
+services:
+  bot:
+    image: ghcr.io/yurnov/xratebot:latest
+    env_file: .env
+    volumes:
+      - ./data:/bot/data
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./data:/data:ro  # Read-only access to SQLite database
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
+    depends_on:
+      - bot
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+```
+
+**Grafana Dashboard Capabilities:**
+- Line charts showing rate trends over time
+- Candlestick charts for daily open/high/low/close
+- Spread analysis (buy vs sell difference)
+- Monobank vs NBU rate comparison
+- Currency pair correlation analysis
+- Custom alerts when rates exceed thresholds
+
+**SQLite Plugin for Grafana:**
+The `frser-sqlite-datasource` plugin enables direct SQLite queries from Grafana, allowing real-time dashboard updates.
+
+### 11.2 Data Export Options
+
+For external analysis tools (Excel, Python pandas, etc.):
+
+```bash
+# Export to CSV
+sqlite3 -header -csv data/exchange_rates.db \
+  "SELECT * FROM exchange_rates WHERE timestamp >= '2024-01-01'" > export.csv
+
+# Export to JSON
+sqlite3 -json data/exchange_rates.db \
+  "SELECT * FROM exchange_rates ORDER BY timestamp DESC LIMIT 1000" > export.json
+```
+
+Python integration for advanced analysis:
+```python
+import pandas as pd
+import sqlite3
+
+conn = sqlite3.connect('data/exchange_rates.db')
+df = pd.read_sql_query("""
+    SELECT timestamp, currency_code, rate_type, rate 
+    FROM exchange_rates 
+    WHERE source = 'monobank'
+    ORDER BY timestamp
+""", conn)
+
+# Create pivot table for analysis
+pivot = df.pivot_table(
+    index='timestamp', 
+    columns=['currency_code', 'rate_type'], 
+    values='rate'
+)
+```
 
 ---
 
@@ -439,8 +612,10 @@ The recommended approach uses SQLite as an embedded time-series database, provid
 - **Full backward compatibility**: CSV logging remains available
 - **Extensible design**: Normalized schema supports additional currencies
 - **Docker Compose ready**: Prepared for future service additions
+- **Analytics-ready**: Rich SQL query support for trend analysis, aggregations, and charting
+- **Visualization-ready**: Compatible with Grafana and Python data analysis tools (pandas, matplotlib)
 
-This plan maintains the project's lightweight nature while significantly improving data storage and querying capabilities.
+This plan maintains the project's lightweight nature while significantly improving data storage, querying, and analysis capabilities.
 
 ---
 
