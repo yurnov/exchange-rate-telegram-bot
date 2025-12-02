@@ -8,9 +8,9 @@ services:
     env_file: .env
     restart: unless-stopped
     healthcheck:
-      # Simple health check - verifies Python runtime is available
-      # Note: The bot doesn't expose an HTTP endpoint, so we check Python availability
-      test: [ "CMD", "python", "-c", "import sys; sys.exit(0)" ]
+      # Health check - verifies the main bot process is running
+      # Uses pgrep to check for a running Python process with main.py
+      test: [ "CMD-SHELL", "pgrep -f 'python.*main.py' || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
