@@ -7,11 +7,3 @@ services:
       - ./data:/bot/data
     env_file: .env
     restart: unless-stopped
-    healthcheck:
-      # Health check - verifies the main bot process is running
-      # Uses pgrep to check for a running Python process with main.py
-      test: [ "CMD-SHELL", "pgrep -f 'python.*main.py' || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
