@@ -68,33 +68,44 @@ def get_exchange_rates():
         response = requests.get(MONOBANK_API_URL, timeout=10)
         monobank_data = response.json()
 
-        # Cache currency pair lookups to avoid redundant iterations
-        usd_uah_item = next(
-            item for item in monobank_data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980
-        )
-        usd_rate = usd_uah_item["rateBuy"]
-        usd_rate_sell = usd_uah_item["rateSell"]
+        # Check if API returned an error (e.g., "Too many requests")
+        if isinstance(monobank_data, dict) and "errorDescription" in monobank_data:
+            error_msg = monobank_data.get("errorDescription", "Unknown error")
+            logger.warning(f"Monobank API error: {error_msg}")
+            monobank_data = None  # Set to None to skip processing
+        elif not isinstance(monobank_data, list):
+            logger.error(f"Unexpected Monobank API response format: {type(monobank_data)}")
+            monobank_data = None
 
-        eur_uah_item = next(
-            item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980
-        )
-        eur_rate = eur_uah_item["rateBuy"]
-        eur_rate_sell = eur_uah_item["rateSell"]
+        # Process rates only if we have valid data
+        if monobank_data:
+            # Cache currency pair lookups to avoid redundant iterations
+            usd_uah_item = next(
+                item for item in monobank_data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980
+            )
+            usd_rate = usd_uah_item["rateBuy"]
+            usd_rate_sell = usd_uah_item["rateSell"]
 
-        pln_rate = next(
-            item for item in monobank_data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980
-        )["rateCross"]
+            eur_uah_item = next(
+                item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980
+            )
+            eur_rate = eur_uah_item["rateBuy"]
+            eur_rate_sell = eur_uah_item["rateSell"]
 
-        # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
-        eur_usd_item = next(
-            item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840
-        )
-        eur_usd_rate = eur_usd_item["rateBuy"]
-        eur_usd_rate_sell = eur_usd_item["rateSell"]
+            pln_rate = next(
+                item for item in monobank_data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980
+            )["rateCross"]
 
-        logger.info(
-            f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}. EUR/USD Buy Rate: {eur_usd_rate}. Sell Rate: {eur_usd_rate_sell}"
-        )
+            # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
+            eur_usd_item = next(
+                item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840
+            )
+            eur_usd_rate = eur_usd_item["rateBuy"]
+            eur_usd_rate_sell = eur_usd_item["rateSell"]
+
+            logger.info(
+                f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}. EUR/USD Buy Rate: {eur_usd_rate}. Sell Rate: {eur_usd_rate_sell}"
+            )
 
         # Store ALL Monobank rates to database if enabled
         if DB_ENABLED and db_connection and monobank_data:
