@@ -54,6 +54,18 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: false
 
+      - name: Update docker-compose.yml with new version
+        if: steps.tag_version.outputs.new_tag != null
+        run: |
+          sed -i 's|ghcr\.io/yurnov/xratebot:v[0-9]\+\.[0-9]\+\.[0-9]\+|ghcr.io/yurnov/xratebot:${{ steps.tag_version.outputs.new_tag }}|g' docker-compose.yml
+
+      - name: Commit changes
+        if: steps.tag_version.outputs.new_tag != null
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Release ${{ steps.tag_version.outputs.new_tag }}"
+          file_pattern: docker-compose.yml
+
       - name: Login to GitHub Container Registry
         # do this step only on push to main and do not run for pull request
         if: github.event_name == 'push'
