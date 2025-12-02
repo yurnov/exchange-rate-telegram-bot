@@ -1,15 +1,16 @@
+name: exchange-rate-telegram-bot
 services:
   bot:
-    image: ghcr.io/yurnov/xratebot:latest
+    image: ghcr.io/yurnov/xratebot:v0.7.1
     container_name: exchange-rate-bot
-    env_file: .env
     volumes:
       - ./data:/bot/data
+    env_file: .env
     restart: unless-stopped
     healthcheck:
       # Simple health check - verifies Python runtime is available
       # Note: The bot doesn't expose an HTTP endpoint, so we check Python availability
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: [ "CMD", "python", "-c", "import sys; sys.exit(0)" ]
       interval: 30s
       timeout: 10s
       retries: 3
