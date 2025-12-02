@@ -62,7 +62,6 @@ def get_exchange_rates():
 
     monobank_data = None
     nbu_data = None
-    current_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
     try:
         # Fetching exchange rates from Monobank API
@@ -100,6 +99,8 @@ def get_exchange_rates():
         # Store ALL Monobank rates to database if enabled
         if DB_ENABLED and db_connection and monobank_data:
             try:
+                # Get current timestamp for this batch of inserts
+                current_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                 rates_to_insert = []
                 for item in monobank_data:
                     currency_code_a = item.get("currencyCodeA")
@@ -163,6 +164,8 @@ def get_exchange_rates():
         # Store ALL NBU rates to database if enabled
         if DB_ENABLED and db_connection and nbu_data:
             try:
+                # Get current timestamp for this batch of inserts
+                current_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
                 rates_to_insert = []
                 # NBU provides exchangedate in format "DD.MM.YYYY" - convert to Unix timestamp
                 # Use start of day for Europe/Kyiv timezone as the timestamp
@@ -177,7 +180,11 @@ def get_exchange_rates():
                             # Parse exchangedate (format: "DD.MM.YYYY") and convert to Unix timestamp
                             # NBU operates in Europe/Kyiv timezone (UTC+2 standard, UTC+3 during DST)
                             # The exchangedate represents the date in Kyiv local time
-                            # For simplicity, we use a fixed UTC+2 offset (winter time)
+                            # LIMITATION: We use a fixed UTC+2 offset (winter/standard time) which doesn't
+                            # account for daylight saving time. This means timestamps during DST period
+                            # (roughly late March to late October) will be off by 1 hour.
+                            # For NBU daily rates, this is acceptable as the key is the date, not the time.
+                            # To properly handle DST, consider using pytz or zoneinfo library.
                             # Example: "02.12.2024" = Dec 2, 2024 00:00 Kyiv = Dec 1, 2024 22:00 UTC
                             date_obj = datetime.strptime(exchangedate, "%d.%m.%Y")
                             # Create a UTC datetime for the same calendar date at midnight
