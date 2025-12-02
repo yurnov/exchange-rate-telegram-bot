@@ -20,6 +20,12 @@ from telegram.ext import (
     filters,
 )
 
+# Import database module (only used when DB_ENABLED=True)
+try:
+    from bot.database import ExchangeRateDatabase
+except ImportError:
+    ExchangeRateDatabase = None  # Will be checked before use
+
 MONOBANK_API_URL = "https://api.monobank.ua/bank/currency"
 NATIONAL_BANK_API_URL = "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
 
@@ -169,13 +175,18 @@ def get_exchange_rates():
                     if cc and rate and exchangedate and r030:
                         try:
                             # Parse exchangedate (format: "DD.MM.YYYY") and convert to Unix timestamp
-                            # NBU operates in Europe/Kyiv timezone (UTC+2, or UTC+3 during DST)
-                            # Since NBU doesn't provide a specific time, we use start of day (midnight)
-                            # We store as UTC timestamp for consistency with Monobank timestamps
+                            # NBU operates in Europe/Kyiv timezone (UTC+2 standard, UTC+3 during DST)
+                            # The exchangedate represents the date in Kyiv local time
+                            # For simplicity, we use a fixed UTC+2 offset (winter time)
+                            # Example: "02.12.2024" = Dec 2, 2024 00:00 Kyiv = Dec 1, 2024 22:00 UTC
                             date_obj = datetime.strptime(exchangedate, "%d.%m.%Y")
-                            # Assume Kyiv timezone offset of UTC+2 (standard time)
-                            # Subtract 2 hours to get equivalent UTC time for midnight Kyiv
-                            api_timestamp = int(date_obj.replace(tzinfo=timezone.utc).timestamp()) - (2 * 3600)
+                            # Create a UTC datetime for the same calendar date at midnight
+                            utc_midnight = datetime(
+                                date_obj.year, date_obj.month, date_obj.day, 0, 0, 0, tzinfo=timezone.utc
+                            )
+                            # Convert to Unix timestamp and adjust for Kyiv offset (subtract 2 hours)
+                            # This gives us the UTC timestamp for when it's midnight in Kyiv
+                            api_timestamp = int(utc_midnight.timestamp()) - (2 * 3600)
 
                             # NBU rates are against UAH (980)
                             rates_to_insert.append(
@@ -541,7 +552,8 @@ def main() -> None:
 
         # Initialize database connection
         try:
-            from bot.database import ExchangeRateDatabase
+            if ExchangeRateDatabase is None:
+                raise ImportError("ExchangeRateDatabase class not available")
 
             db_connection = ExchangeRateDatabase(DB_PATH)
             logger.info("Database initialized successfully")

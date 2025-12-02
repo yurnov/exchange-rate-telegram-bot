@@ -172,7 +172,7 @@ class ExchangeRateDatabase:
                 (418, 'LAK', 'Lao Kip', '₭'),
                 (524, 'NPR', 'Nepalese Rupee', 'Rs'),
                 (96, 'BND', 'Brunei Dollar', 'B$'),
-                (352, 'ISK', 'Icelandic Krona', 'kr'),
+                (352, 'ISK', 'Icelandic Króna', 'kr'),
                 (68, 'BOB', 'Bolivian Boliviano', 'Bs'),
                 (600, 'PYG', 'Paraguayan Guarani', '₲'),
                 (188, 'CRC', 'Costa Rican Colon', '₡'),
