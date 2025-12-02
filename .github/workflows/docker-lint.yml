@@ -29,6 +29,6 @@ jobs:
           ignore: DL3008,SC3009,DL3013
 
       - name: Lint docker-compose.yml
-        uses: zavoloklom/docker-compose-linter@v1.0.0
+        uses: docker-compose-linter/dclint-github-action/docker-action@v1.6.0
         with:
-          file: docker-compose.yml
+          args: '["./docker-compose.yml", "--debug", "-f", "github"]'
