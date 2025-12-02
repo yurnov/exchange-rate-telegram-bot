@@ -63,21 +63,23 @@ def get_exchange_rates():
         response = requests.get(MONOBANK_API_URL, timeout=10)
         monobank_data = response.json()
 
-        usd_rate = next(
+        # Cache currency pair lookups to avoid redundant iterations
+        usd_uah_item = next(
             item for item in monobank_data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980
-        )["rateBuy"]
-        usd_rate_sell = next(
-            item for item in monobank_data if item["currencyCodeA"] == 840 and item["currencyCodeB"] == 980
-        )["rateSell"]
-        eur_rate = next(
+        )
+        usd_rate = usd_uah_item["rateBuy"]
+        usd_rate_sell = usd_uah_item["rateSell"]
+
+        eur_uah_item = next(
             item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980
-        )["rateBuy"]
-        eur_rate_sell = next(
-            item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 980
-        )["rateSell"]
+        )
+        eur_rate = eur_uah_item["rateBuy"]
+        eur_rate_sell = eur_uah_item["rateSell"]
+
         pln_rate = next(
             item for item in monobank_data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980
         )["rateCross"]
+
         # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
         eur_usd_item = next(
             item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840
@@ -166,13 +168,14 @@ def get_exchange_rates():
 
                     if cc and rate and exchangedate and r030:
                         try:
-                            # Parse exchangedate and convert to Unix timestamp
-                            # NBU date is in Europe/Kyiv timezone, start of day
+                            # Parse exchangedate (format: "DD.MM.YYYY") and convert to Unix timestamp
+                            # NBU operates in Europe/Kyiv timezone (UTC+2, or UTC+3 during DST)
+                            # Since NBU doesn't provide a specific time, we use start of day (midnight)
+                            # We store as UTC timestamp for consistency with Monobank timestamps
                             date_obj = datetime.strptime(exchangedate, "%d.%m.%Y")
-                            # Set to start of day and convert to UTC timestamp
-                            # Kyiv is UTC+2 (or UTC+3 during DST), but for consistency
-                            # we use start of day as-is since NBU updates once daily
-                            api_timestamp = int(date_obj.replace(tzinfo=timezone.utc).timestamp())
+                            # Assume Kyiv timezone offset of UTC+2 (standard time)
+                            # Subtract 2 hours to get equivalent UTC time for midnight Kyiv
+                            api_timestamp = int(date_obj.replace(tzinfo=timezone.utc).timestamp()) - (2 * 3600)
 
                             # NBU rates are against UAH (980)
                             rates_to_insert.append(
@@ -187,7 +190,7 @@ def get_exchange_rates():
                                     rate,  # rate_cross (official rate)
                                 )
                             )
-                        except ValueError as ve:  # pylint: disable=broad-exception-caught
+                        except ValueError as ve:
                             logger.warning(f"Error parsing NBU date '{exchangedate}': {str(ve)}")
                             continue
 

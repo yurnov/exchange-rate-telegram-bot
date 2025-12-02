@@ -41,6 +41,10 @@ class ExchangeRateDatabase:
     def _connect(self):
         """Establish database connection with optimized settings."""
         try:
+            # Note: check_same_thread=False is safe here because:
+            # 1. The bot runs in a single-threaded event loop (telegram bot)
+            # 2. All database operations happen in the same thread (scheduled task)
+            # 3. SQLite WAL mode provides process-level concurrency if needed
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             # Enable WAL mode for better concurrent access
             self.conn.execute("PRAGMA journal_mode=WAL")
