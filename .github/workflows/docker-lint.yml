@@ -1,0 +1,34 @@
+name: Lint Docker files
+
+on:
+  push:
+    branches:
+      - main
+      - 'dev*'
+  pull_request:
+    branches:
+      - main
+      - 'dev*'
+
+jobs:
+  lint-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+
+      - name: Lint Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+          ignore: DL3008,SC3009,DL3013
+
+      - name: Lint docker-compose.yml
+        uses: docker-compose-linter/dclint-github-action/docker-action@v1.6.0
+        with:
+          args: '["./docker-compose.yml", "--debug", "-f", "github"]'
