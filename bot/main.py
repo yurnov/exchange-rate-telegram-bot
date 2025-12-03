@@ -22,7 +22,7 @@ from telegram.ext import (
 
 # Import database module (only used when DB_ENABLED=True)
 try:
-    from bot.database import ExchangeRateDatabase
+    from database import ExchangeRateDatabase
 except ImportError:
     ExchangeRateDatabase = None  # Will be checked before use
 
