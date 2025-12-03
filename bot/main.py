@@ -172,65 +172,9 @@ def get_exchange_rates():
         eur_rate_nbu = next(item for item in nbu_data if item["cc"] == "EUR")["rate"]
         pln_rate_nbu = next(item for item in nbu_data if item["cc"] == "PLN")["rate"]
 
-        # Store ALL NBU rates to database if enabled
-        if DB_ENABLED and db_connection and nbu_data:
-            try:
-                # Get current timestamp for this batch of inserts
-                current_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-                rates_to_insert = []
-                # NBU provides exchangedate in format "DD.MM.YYYY" - convert to Unix timestamp
-                # Use start of day for Europe/Kyiv timezone as the timestamp
-                for item in nbu_data:
-                    cc = item.get("cc")
-                    rate = item.get("rate")
-                    exchangedate = item.get("exchangedate")  # Format: "02.12.2025"
-                    r030 = item.get("r030")  # ISO 4217 numeric code
-
-                    if cc and rate and exchangedate and r030:
-                        try:
-                            # Parse exchangedate (format: "DD.MM.YYYY") and convert to Unix timestamp
-                            # NBU operates in Europe/Kyiv timezone (UTC+2 standard, UTC+3 during DST)
-                            # The exchangedate represents the date in Kyiv local time
-                            # LIMITATION: We use a fixed UTC+2 offset (winter/standard time) which doesn't
-                            # account for daylight saving time. This means timestamps during DST period
-                            # (roughly late March to late October) will be off by 1 hour.
-                            # For NBU daily rates, this is acceptable as the key is the date, not the time.
-                            # To properly handle DST, consider using pytz or zoneinfo library.
-                            # Example: "02.12.2024" = Dec 2, 2024 00:00 Kyiv = Dec 1, 2024 22:00 UTC
-                            date_obj = datetime.strptime(exchangedate, "%d.%m.%Y")
-                            # Create a UTC datetime for the same calendar date at midnight
-                            utc_midnight = datetime(
-                                date_obj.year, date_obj.month, date_obj.day, 0, 0, 0, tzinfo=timezone.utc
-                            )
-                            # Convert to Unix timestamp and adjust for Kyiv offset (subtract 2 hours)
-                            # This gives us the UTC timestamp for when it's midnight in Kyiv
-                            api_timestamp = int(utc_midnight.timestamp()) - (2 * 3600)
-
-                            # NBU rates are against UAH (980)
-                            rates_to_insert.append(
-                                (
-                                    current_timestamp,
-                                    api_timestamp,
-                                    'nbu',
-                                    r030,  # currency code
-                                    980,  # UAH
-                                    None,  # rate_buy
-                                    None,  # rate_sell
-                                    rate,  # rate_cross (official rate)
-                                )
-                            )
-                        except ValueError as ve:
-                            logger.warning(f"Error parsing NBU date '{exchangedate}': {str(ve)}")
-                            continue
-
-                if rates_to_insert:
-                    inserted, ignored = db_connection.insert_exchange_rates(rates_to_insert)
-                    logger.info(
-                        f"NBU rates - Total: {len(rates_to_insert)}, Inserted: {inserted}, Ignored (duplicates): {ignored}"
-                    )
-
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.error(f"Error storing NBU rates to database: {str(e)}")
+        # Note: NBU rates are NOT stored in database
+        # NBU data is updated infrequently and can be easily retrieved via their historical API
+        # We only use NBU rates for display in bot responses
 
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Error fetching exchange rates from NBU: {str(e)}")
