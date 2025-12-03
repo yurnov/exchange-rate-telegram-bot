@@ -225,6 +225,31 @@ class ExchangeRateDatabase:
             logger.error(f"Error initializing database schema: {str(e)}")
             raise
 
+    def _ensure_currency_codes_exist(self, currency_codes: set):
+        """
+        Ensure currency codes exist in the currencies table.
+        Auto-insert any missing codes with placeholder data.
+
+        Args:
+            currency_codes: Set of currency code integers to check
+        """
+        try:
+            cursor = self.conn.cursor()
+
+            for code in currency_codes:
+                # Insert currency code if it doesn't exist
+                # Use INSERT OR IGNORE to handle race conditions
+                cursor.execute(
+                    "INSERT OR IGNORE INTO currencies (code, alpha_code, name, symbol) VALUES (?, ?, ?, ?)",
+                    (code, f"CUR{code}", f"Currency {code}", ""),
+                )
+
+            self.conn.commit()
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning(f"Error ensuring currency codes exist: {str(e)}")
+            self.conn.rollback()
+
     def insert_exchange_rates(
         self, rates: List[Tuple[str, int, str, int, int, Optional[float], Optional[float], Optional[float]]]
     ) -> Tuple[int, int]:
@@ -242,6 +267,15 @@ class ExchangeRateDatabase:
             return 0, 0
 
         try:
+            # Extract all unique currency codes from the rates
+            currency_codes = set()
+            for rate in rates:
+                currency_codes.add(rate[3])  # currency_code_a
+                currency_codes.add(rate[4])  # currency_code_b
+
+            # Ensure all currency codes exist in the currencies table
+            self._ensure_currency_codes_exist(currency_codes)
+
             cursor = self.conn.cursor()
 
             # Use INSERT OR IGNORE - SQLite will automatically skip duplicates
