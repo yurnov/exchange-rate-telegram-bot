@@ -59,5 +59,3 @@ jobs:
           push: ${{ github.ref == 'refs/heads/development' }}
           no-cache: true
           tags: ghcr.io/yurnov/xratebot:dev
-
-  
