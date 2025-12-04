@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-    
+
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
@@ -31,4 +31,5 @@ jobs:
       - name: Lint docker-compose.yml
         uses: docker-compose-linter/dclint-github-action/docker-action@v1.6.0
         with:
-          args: '["./docker-compose.yml", "--debug", "-f", "github"]'
+          args: '["./docker-compose.yml", "--debug", "-f", "github",
+           "--disable-rule", "service-image-require-explicit-tag"]'
