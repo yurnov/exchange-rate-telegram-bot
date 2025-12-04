@@ -51,6 +51,14 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get current date
+        id: date
+        run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+      - name: Get commit hash
+        id: commit
+        run: echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB
+
       - name: Build Docker image for development version and push to registry
         uses: docker/build-push-action@v6
         with:
@@ -59,3 +67,7 @@ jobs:
           push: ${{ github.ref == 'refs/heads/development' }}
           no-cache: true
           tags: ghcr.io/yurnov/xratebot:dev
+          build-args: |
+            VERSION=dev
+            BUILD_DATE=${{ steps.date.outputs.date }}
+            GIT_COMMIT=${{ steps.commit.outputs.commit }}
