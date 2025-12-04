@@ -57,7 +57,7 @@ jobs:
 
       - name: Get commit hash
         id: commit
-        run: echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB
+        run: echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build Docker image for development version and push to registry
         uses: docker/build-push-action@v6
