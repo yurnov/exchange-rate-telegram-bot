@@ -1,7 +1,7 @@
 name: exchange-rate-telegram-bot
 services:
   bot:
-    image: ghcr.io/yurnov/xratebot:v0.7.1
+    image: ghcr.io/yurnov/xratebot:dev
     container_name: exchange-rate-bot
     volumes:
       - ./data:/bot/data
