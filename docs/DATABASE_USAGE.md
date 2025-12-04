@@ -94,7 +94,7 @@ CREATE INDEX idx_rates_currency_a ON exchange_rates(currency_code_a, api_timesta
 Get the most recent USD/UAH rate:
 
 ```sql
-SELECT 
+SELECT
     datetime(api_timestamp, 'unixepoch') as update_time,
     rate_buy,
     rate_sell
@@ -105,8 +105,9 @@ WHERE currency_code_a = 840  -- USD
 ORDER BY api_timestamp DESC
 LIMIT 1;
 ```
+<details>
+<summary>Python Example</summary>
 
-**Python Example:**
 ```python
 import sqlite3
 from datetime import datetime
@@ -115,7 +116,7 @@ conn = sqlite3.connect('data/exchange_rates.db')
 cursor = conn.cursor()
 
 cursor.execute("""
-    SELECT 
+    SELECT
         api_timestamp,
         rate_buy,
         rate_sell
@@ -134,13 +135,14 @@ if result:
 
 conn.close()
 ```
+</details>
 
 ### 2. Get Historical Rates for Time Range
 
 Get all USD/UAH rates for the last 7 days:
 
 ```sql
-SELECT 
+SELECT
     datetime(api_timestamp, 'unixepoch') as update_time,
     rate_buy,
     rate_sell
@@ -151,7 +153,9 @@ WHERE currency_code_a = 840
 ORDER BY api_timestamp ASC;
 ```
 
-**Python Example:**
+<details>
+<summary>Python Example</summary>
+
 ```python
 import sqlite3
 from datetime import datetime, timedelta
@@ -177,6 +181,7 @@ for row in cursor.fetchall():
 
 conn.close()
 ```
+</details>
 
 ### 3. Get All Available Currency Pairs
 
@@ -197,7 +202,9 @@ GROUP BY e.currency_code_a, e.currency_code_b
 ORDER BY rate_count DESC;
 ```
 
-**Python Example:**
+<details>
+<summary>Python Example</summary>
+
 ```python
 import sqlite3
 
@@ -222,13 +229,14 @@ for from_curr, to_curr, count in cursor.fetchall():
 
 conn.close()
 ```
+</details>
 
 ### 4. Calculate Average Rate Over Time Period
 
 Calculate average USD/UAH buy rate for last 30 days:
 
 ```sql
-SELECT 
+SELECT
     AVG(rate_buy) as avg_buy_rate,
     MIN(rate_buy) as min_buy_rate,
     MAX(rate_buy) as max_buy_rate,
@@ -240,7 +248,9 @@ WHERE currency_code_a = 840
   AND rate_buy IS NOT NULL;
 ```
 
-**Python Example:**
+<details>
+<summary>Python Example</summary>
+
 ```python
 import sqlite3
 from datetime import datetime, timedelta
@@ -251,7 +261,7 @@ cursor = conn.cursor()
 thirty_days_ago = int((datetime.now() - timedelta(days=30)).timestamp())
 
 cursor.execute("""
-    SELECT 
+    SELECT
         AVG(rate_buy) as avg_buy,
         MIN(rate_buy) as min_buy,
         MAX(rate_buy) as max_buy,
@@ -271,6 +281,7 @@ print(f"  Samples: {count}")
 
 conn.close()
 ```
+</details>
 
 ### 5. Get Daily Rate Changes
 
@@ -278,7 +289,7 @@ Calculate daily rate changes for USD/UAH:
 
 ```sql
 WITH daily_rates AS (
-    SELECT 
+    SELECT
         DATE(datetime(api_timestamp, 'unixepoch')) as rate_date,
         AVG(rate_buy) as avg_buy,
         AVG(rate_sell) as avg_sell
@@ -288,7 +299,7 @@ WITH daily_rates AS (
       AND api_timestamp >= strftime('%s', 'now', '-30 days')
     GROUP BY rate_date
 )
-SELECT 
+SELECT
     rate_date,
     avg_buy,
     avg_sell,
@@ -298,7 +309,9 @@ FROM daily_rates
 ORDER BY rate_date DESC;
 ```
 
-**Python Example:**
+<details>
+<summary>Python Example</summary>
+
 ```python
 import sqlite3
 from datetime import datetime, timedelta
@@ -310,7 +323,7 @@ thirty_days_ago = int((datetime.now() - timedelta(days=30)).timestamp())
 
 cursor.execute("""
     WITH daily_rates AS (
-        SELECT 
+        SELECT
             DATE(datetime(api_timestamp, 'unixepoch')) as rate_date,
             AVG(rate_buy) as avg_buy,
             AVG(rate_sell) as avg_sell
@@ -319,7 +332,7 @@ cursor.execute("""
           AND api_timestamp >= ?
         GROUP BY rate_date
     )
-    SELECT 
+    SELECT
         rate_date,
         avg_buy,
         avg_sell
@@ -334,13 +347,14 @@ for rate_date, avg_buy, avg_sell in cursor.fetchall():
 
 conn.close()
 ```
+</details>
 
 ### 6. Get Rate Update Frequency
 
 Analyze how often each currency pair is updated:
 
 ```sql
-SELECT 
+SELECT
     c1.alpha_code || '/' || c2.alpha_code as pair,
     COUNT(*) as update_count,
     (MAX(api_timestamp) - MIN(api_timestamp)) / 3600.0 / COUNT(*) as avg_hours_between_updates
@@ -367,7 +381,7 @@ conn = sqlite3.connect('data/exchange_rates.db')
 cursor = conn.cursor()
 
 cursor.execute("""
-    SELECT 
+    SELECT
         datetime(e.api_timestamp, 'unixepoch') as update_time,
         c1.alpha_code as from_currency,
         c2.alpha_code as to_currency,
@@ -406,7 +420,7 @@ cursor = conn.cursor()
 seven_days_ago = int((datetime.now() - timedelta(days=7)).timestamp())
 
 cursor.execute("""
-    SELECT 
+    SELECT
         strftime('%Y-%m-%d %H:00:00', datetime(api_timestamp, 'unixepoch')) as hour,
         AVG(rate_buy) as avg_buy,
         AVG(rate_sell) as avg_sell
@@ -447,6 +461,9 @@ conn.close()
 -- sqlite3 data/exchange_rates.db "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();"
 ```
 
+<details>
+<summary>Python Example</summary>
+
 ```python
 import sqlite3
 import os
@@ -469,6 +486,7 @@ print(f"Currency codes: {currency_count}")
 
 conn.close()
 ```
+</details>
 
 ### Vacuum Database (Reclaim Space)
 
@@ -522,7 +540,7 @@ if len(rates) > 1:
     volatility = statistics.stdev(rates)
     mean_rate = statistics.mean(rates)
     cv = (volatility / mean_rate) * 100  # Coefficient of variation
-    
+
     print(f"USD/UAH Rate Statistics (last 7 days):")
     print(f"  Mean: {mean_rate:.4f}")
     print(f"  Std Dev: {volatility:.4f}")
