@@ -4,8 +4,8 @@
 """
 SQLite database module for storing exchange rate data.
 
-This module provides database operations for storing ALL exchange rates
-from Monobank and NBU APIs with timestamp-based deduplication.
+This module provides database operations for storing Monobank exchange rates
+with timestamp-based deduplication.
 """
 
 import logging
