@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.0
+
+[Support of SQLite database implemetned](https://github.com/yurnov/exchange-rate-telegram-bot/)
+
 ## v0.7.0
 
 [3PP lifecycle](https://github.com/yurnov/exchange-rate-telegram-bot/pull/28):
