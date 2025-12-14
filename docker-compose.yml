@@ -1,0 +1,9 @@
+name: exchange-rate-telegram-bot
+services:
+  bot:
+    image: ghcr.io/yurnov/xratebot:dev
+    container_name: exchange-rate-bot
+    volumes:
+      - ./data:/bot/data
+    env_file: .env
+    restart: unless-stopped

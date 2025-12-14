@@ -73,14 +73,41 @@ Alternatively, provide `BOT_TOKEN` as an environment variable when running the c
 
 **Important**: Setting `PULL_INTERVAL` below 30 seconds is not recommended as it may trigger rate limiting from Monobank API (`{'errorDescription': 'Too many requests'}`).
 
-#### CSV Logging Format
+#### CSV Logging Format (Legacy)
 
 When `LOG_RATE=True`, the bot creates `exchange_rates.csv` with the following format:
 ```
 Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
 2025-11-30 10:15:30,41.20,41.60,43.50,44.00,10.25
 ```
+However, legacy CSV logging is not recommended for new deployments. SQLite database storage is suggested instead for better performance and data integrity.
 
+<details>
+<summary>Migration from CSV to SQLite Database</summary>
+
+The Docker image includes a migration script (`migrate_csv_to_db.py`) to convert existing CSV data to SQLite format.
+
+**Basic usage with defaults:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py
+```
+
+**Dry run to test migration:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py --dry-run
+```
+
+**Custom file paths:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py --csv-file /custom/path/rates.csv --db-file /custom/path/db.sqlite
+```
+
+**All options combined:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py --csv-file ../data/old_rates.csv --dry-run --verbose
+```
+
+</details>
 
 ## Running
 
@@ -120,9 +147,54 @@ Alternatively, provide the token directly as an environment variable:
 docker run --rm -d -e BOT_TOKEN="your_bot_token" ghcr.io/yurnov/xratebot:latest
 ```
 
+### Option 3: Use Docker Compose (Recommended)
+
+Docker Compose provides a convenient way to manage the bot with persistent data storage.
+
+1. Create a `.env` file with your bot token (use `.env.example` as template):
+
+```bash
+cp .env.example .env
+# Edit .env and add your BOT_TOKEN
+```
+
+2. Create a `data` directory for persistent storage:
+
+```bash
+mkdir -p data
+```
+
+3. Start the bot using Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+4. View logs:
+
+```bash
+docker compose logs -f bot
+```
+
+5. Stop the bot:
+
+```bash
+docker compose down
+```
+
+The Docker Compose configuration automatically:
+- Mounts the `./data` directory to persist database and CSV files
+- Loads environment variables from `.env` file
+- Restarts the container automatically unless manually stopped
+- Includes a health check to monitor bot status
+
 ### Running with CSV Logging
 
-When exchange rate logging is enabled (`LOG_RATE=True`), mount a CSV file to persist data:
+When exchange rate logging is enabled (`LOG_RATE=True`), the bot will save exchange rates to a CSV file.
+
+**With Docker Compose:** The `./data` directory is already mounted, so CSV files will be automatically persisted in `./data/exchange_rates.csv`.
+
+**With standalone Docker:** Mount a CSV file to persist data:
 
 ```bash
 touch exchange_rates.csv
@@ -132,7 +204,7 @@ docker run --rm -d \
   ghcr.io/yurnov/xratebot:latest
 ```
 
-### Option 3: Try the Live Bot
+### Option 4: Try the Live Bot
 
 Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rate_bot)
 
@@ -142,7 +214,7 @@ Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rat
 
 - **Language**: Python 3.14
 - **Framework**: [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-- **APIs**: 
+- **APIs**:
   - [Monobank API](https://api.monobank.ua/docs/) - for market exchange rates
   - [NBU API](https://bank.gov.ua/ua/open-data/api-dev) - for official exchange rates
 - **Scheduling**: Uses `schedule` library for periodic rate updates
