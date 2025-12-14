@@ -28,11 +28,11 @@ jobs:
 
       - name: Lint Python code with black
         run: |
-          black --check --skip-string-normalization --line-length 120 bot;
+          black --check --skip-string-normalization --line-length 120 bot/
 
       - name: Lint Python code with pylint
         run: |
-          find . -name *.py -exec pylint --disable=R,C,W1203 '{}' \;
+          pylint --disable=R,C,W1203 bot/
 
       - name: Lint Dockerfile with hadolint
         uses: hadolint/hadolint-action@v3.3.0

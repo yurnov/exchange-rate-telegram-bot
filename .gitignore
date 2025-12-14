@@ -1,7 +1,9 @@
 # ENV and project specific files
 .env
 exchange_rates.csv
-data/
+data/*.csv
+data/*.png
+data/*.db*
 chart-builder/data/*.csv
 chart-builder/data/*.png
 create_chart.sh

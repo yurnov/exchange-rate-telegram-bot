@@ -73,14 +73,41 @@ Alternatively, provide `BOT_TOKEN` as an environment variable when running the c
 
 **Important**: Setting `PULL_INTERVAL` below 30 seconds is not recommended as it may trigger rate limiting from Monobank API (`{'errorDescription': 'Too many requests'}`).
 
-#### CSV Logging Format
+#### CSV Logging Format (Legacy)
 
 When `LOG_RATE=True`, the bot creates `exchange_rates.csv` with the following format:
 ```
 Date Time, USD Buy Rate, USD Sell Rate, EUR Buy Rate, EUR Sell Rate, PLN Exchange Rate
 2025-11-30 10:15:30,41.20,41.60,43.50,44.00,10.25
 ```
+However, legacy CSV logging is not recommended for new deployments. SQLite database storage is suggested instead for better performance and data integrity.
 
+<details>
+<summary>Migration from CSV to SQLite Database</summary>
+
+The Docker image includes a migration script (`migrate_csv_to_db.py`) to convert existing CSV data to SQLite format.
+
+**Basic usage with defaults:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py
+```
+
+**Dry run to test migration:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py --dry-run
+```
+
+**Custom file paths:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py --csv-file /custom/path/rates.csv --db-file /custom/path/db.sqlite
+```
+
+**All options combined:**
+```bash
+python /bot/scripts/migrate_csv_to_db.py --csv-file ../data/old_rates.csv --dry-run --verbose
+```
+
+</details>
 
 ## Running
 
@@ -187,7 +214,7 @@ Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rat
 
 - **Language**: Python 3.14
 - **Framework**: [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
-- **APIs**: 
+- **APIs**:
   - [Monobank API](https://api.monobank.ua/docs/) - for market exchange rates
   - [NBU API](https://bank.gov.ua/ua/open-data/api-dev) - for official exchange rates
 - **Scheduling**: Uses `schedule` library for periodic rate updates

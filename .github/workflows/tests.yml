@@ -36,7 +36,7 @@ jobs:
       - name: Lint Python code
         run: |
           black --check --skip-string-normalization --line-length 120 bot;
-          find . -name *.py -exec pylint --disable=R,C,W1203 '{}' \;
+          pylint --disable=R,C,W1203 bot/
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
