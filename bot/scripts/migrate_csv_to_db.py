@@ -28,8 +28,8 @@ BATCH_SIZE = 1000  # Process records in batches for better performance
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Regex pattern to match CSV lines - using simple float pattern
-CSV_PATTERN = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$'
+# Regex pattern to match CSV lines - using strict float pattern
+CSV_PATTERN = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?)$'
 
 
 def parse_csv_line(line: str) -> Optional[Tuple]:
@@ -60,7 +60,7 @@ def parse_csv_line(line: str) -> Optional[Tuple]:
 
         return (timestamp_str, usd_buy, usd_sell, eur_buy, eur_sell, pln_cross)
     except (ValueError, AttributeError, IndexError) as e:
-        logger.debug(f"Error parsing line: {e}")
+        logger.warning(f"Error parsing line: {e}")
         return None
 
 
@@ -88,7 +88,7 @@ def deduplicate_rates(csv_records: List[Tuple]) -> List[Tuple]:
         if current_rates != prev_rates:
             # Rates changed - store the previous group if exists
             if prev_rates is not None:
-                deduplicated. append((first_timestamp, *prev_rates))
+                deduplicated.append((first_timestamp, *prev_rates))
 
             # Start new group
             first_timestamp = timestamp_str
@@ -121,60 +121,76 @@ def prepare_database_records(deduplicated_records: List[Tuple]) -> List[Tuple]:
         api_timestamp = int(dt.timestamp())
 
         # USD record (840 USD to 980 UAH)
-        db_records.append((
-            timestamp_str,
-            api_timestamp,
-            'monobank',
-            840,  # USD
-            980,  # UAH
-            usd_buy,
-            usd_sell,
-            None  # No cross rate for USD
-        ))
+        db_records.append(
+            (
+                timestamp_str,
+                api_timestamp,
+                'monobank',
+                840,  # USD
+                980,  # UAH
+                usd_buy,
+                usd_sell,
+                None,  # No cross rate for USD
+            )
+        )
 
         # EUR record (978 EUR to 980 UAH)
-        db_records.append((
-            timestamp_str,
-            api_timestamp,
-            'monobank',
-            978,  # EUR
-            980,  # UAH
-            eur_buy,
-            eur_sell,
-            None  # No cross rate for EUR
-        ))
+        db_records.append(
+            (
+                timestamp_str,
+                api_timestamp,
+                'monobank',
+                978,  # EUR
+                980,  # UAH
+                eur_buy,
+                eur_sell,
+                None,  # No cross rate for EUR
+            )
+        )
 
         # PLN record (985 PLN to 980 UAH)
-        db_records.append((
-            timestamp_str,
-            api_timestamp,
-            'monobank',
-            985,  # PLN
-            980,  # UAH
-            None,  # No buy rate for PLN
-            None,  # No sell rate for PLN
-            pln_cross
-        ))
+        db_records.append(
+            (
+                timestamp_str,
+                api_timestamp,
+                'monobank',
+                985,  # PLN
+                980,  # UAH
+                None,  # No buy rate for PLN
+                None,  # No sell rate for PLN
+                pln_cross,
+            )
+        )
 
     return db_records
 
 
 def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
-    """Main migration function."""
+    """
+    Main migration function.
+
+    Args:
+        csv_file: Path to the CSV file to migrate
+        db_file: Path to the SQLite database file
+        dry_run: If True, parse and validate CSV but don't write to database
+
+    Returns:
+        int: 0 on success, 1 on failure
+    """
     logger.info("Starting CSV to SQLite migration")
     logger.info(f"CSV file: {csv_file}")
     logger.info(f"Database file: {db_file}")
     if dry_run:
-        logger. info("DRY RUN MODE - No data will be written to database")
+        logger.info("DRY RUN MODE - No data will be written to database")
 
     # Statistics
     stats = {
-        'total_lines':  0,
+        'total_lines': 0,
         'valid_lines': 0,
-        'invalid_lines':  0,
+        'invalid_lines': 0,
         'deduplicated_records': 0,
-        'db_records_prepared':  0,
-        'inserted':  0,
+        'db_records_prepared': 0,
+        'inserted': 0,
         'duplicates_skipped': 0,
     }
 
@@ -202,8 +218,9 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
                 if line_num % 10000 == 0:
                     logger.info(f"Processed {line_num} lines...")
 
-        logger.info(f"CSV parsing complete. Valid records: {stats['valid_lines']}, "
-                   f"Invalid: {stats['invalid_lines']}")
+        logger.info(
+            f"CSV parsing complete. Valid records: {stats['valid_lines']}, " f"Invalid: {stats['invalid_lines']}"
+        )
 
         # Show failed examples if any
         if failed_examples:
@@ -225,25 +242,26 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
         logger.info("Preparing database records...")
         db_records = prepare_database_records(deduplicated)
         stats['db_records_prepared'] = len(db_records)
-        logger.info(f"Prepared {stats['db_records_prepared']} database records "
-                   f"(3 currencies per CSV record)")
+        logger.info(f"Prepared {stats['db_records_prepared']} database records " f"(3 currencies per CSV record)")
 
         # Insert into database in batches (skip if dry run)
         if dry_run:
-            logger.info("DRY RUN:  Skipping database insertion")
+            logger.info("DRY RUN: Skipping database insertion")
             logger.info(f"Would insert {stats['db_records_prepared']} records into database")
         else:
             logger.info("Inserting records into database...")
             with ExchangeRateDatabase(db_file) as db:
                 for i in range(0, len(db_records), BATCH_SIZE):
-                    batch = db_records[i:i + BATCH_SIZE]
+                    batch = db_records[i : i + BATCH_SIZE]
                     inserted, ignored = db.insert_exchange_rates(batch)
                     stats['inserted'] += inserted
                     stats['duplicates_skipped'] += ignored
 
                     if (i // BATCH_SIZE + 1) % 10 == 0:
-                        logger.info(f"Batch {i // BATCH_SIZE + 1}:  Inserted {stats['inserted']} records, "
-                                   f"skipped {stats['duplicates_skipped']} duplicates so far...")
+                        logger.info(
+                            f"Batch {i // BATCH_SIZE + 1}: Inserted {stats['inserted']} records, "
+                            f"skipped {stats['duplicates_skipped']} duplicates so far..."
+                        )
 
         # Final report
         logger.info("\n" + "=" * 60)
@@ -255,14 +273,14 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
         logger.info(f"After deduplication:            {stats['deduplicated_records']}")
         logger.info(f"Database records prepared:      {stats['db_records_prepared']}")
         if not dry_run:
-            logger. info(f"Records inserted:               {stats['inserted']}")
+            logger.info(f"Records inserted:               {stats['inserted']}")
             logger.info(f"Duplicates skipped:             {stats['duplicates_skipped']}")
         logger.info("=" * 60)
 
         return 0
 
     except FileNotFoundError:
-        logger. error(f"CSV file not found: {csv_file}")
+        logger.error(f"CSV file not found: {csv_file}")
         return 1
     except Exception as e:
         logger.error(f"Migration failed: {str(e)}", exc_info=True)
@@ -271,7 +289,7 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
 
 def main():
     """Parse command-line arguments and run migration."""
-    parser = argparse. ArgumentParser(
+    parser = argparse.ArgumentParser(
         description='Migrate exchange rates from CSV to SQLite database',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -290,43 +308,29 @@ Examples:
 
   # Combination
   python migrate_csv_to_db.py --csv-file custom.csv --dry-run --verbose
-        """
+        """,
     )
 
     parser.add_argument(
-        '--csv-file',
-        type=str,
-        default=DEFAULT_CSV_FILE,
-        help=f'Path to CSV file (default: {DEFAULT_CSV_FILE})'
+        '--csv-file', type=str, default=DEFAULT_CSV_FILE, help=f'Path to CSV file (default: {DEFAULT_CSV_FILE})'
     )
 
     parser.add_argument(
         '--db-file',
         type=str,
         default=DEFAULT_DB_FILE,
-        help=f'Path to SQLite database file (default: {DEFAULT_DB_FILE})'
+        help=f'Path to SQLite database file (default: {DEFAULT_DB_FILE})',
     )
 
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Perform a dry run without writing to database'
-    )
+    parser.add_argument('--dry-run', action='store_true', help='Perform a dry run without writing to database')
 
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose output (DEBUG level logging)'
-    )
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose output (DEBUG level logging)')
 
     args = parser.parse_args()
 
     # Configure logging based on verbose flag
     log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # Convert relative paths to absolute based on script location
     script_dir = Path(__file__).parent
