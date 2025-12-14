@@ -7,6 +7,7 @@ data/*.db*
 chart-builder/data/*.csv
 chart-builder/data/*.png
 create_chart.sh
+bot/data
 # Python
 *.pyc
 __pycache__/
