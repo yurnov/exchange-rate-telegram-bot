@@ -1,5 +1,9 @@
 FROM python:3.14-slim
 
+ARG BUILD_DATE
+ARG GIT_COMMIT
+ARG VERSION
+
 # OCI Image Format Specification labels
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
 LABEL org.opencontainers.image.title="Exchange Rate Telegram Bot" \
