@@ -28,6 +28,7 @@ BATCH_SIZE = 1000  # Process records in batches for better performance
 
 # Setup logging
 logger = logging.getLogger(__name__)
+logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO)
 
 # Regex pattern to match CSV lines - using simple float pattern
 CSV_PATTERN = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$'
@@ -265,7 +266,8 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
                         )
 
         # Final report
-        logger.info("\n" + "=" * 60)  # pylint: disable=logging-not-lazy
+        logger.info("\n")
+        logger.info("=" * 60)  # pylint: disable=logging-not-lazy
         logger.info("MIGRATION COMPLETE" + (" (DRY RUN)" if dry_run else ""))  # pylint: disable=logging-not-lazy
         logger.info("=" * 60)
         logger.info(f"Total CSV lines processed:       {stats['total_lines']}")
@@ -317,7 +319,6 @@ Examples:
         type=str,
         default=DEFAULT_CSV_FILE,
         help='Path to CSV file (default: %s)',
-        default=DEFAULT_CSV_FILE,
     )
 
     parser.add_argument(
@@ -325,7 +326,6 @@ Examples:
         type=str,
         default=DEFAULT_DB_FILE,
         help='Path to SQLite database file (default: %s)',
-        default=DEFAULT_DB_FILE,
     )
 
     parser.add_argument('--dry-run', action='store_true', help='Perform a dry run without writing to database')
