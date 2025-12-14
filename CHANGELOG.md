@@ -2,7 +2,7 @@
 
 ## v0.8.0
 
-[Support of SQLite database implemetned](https://github.com/yurnov/exchange-rate-telegram-bot/)
+[Support of SQLite database implemented](https://github.com/yurnov/exchange-rate-telegram-bot/)
 
 ## v0.7.0
 
