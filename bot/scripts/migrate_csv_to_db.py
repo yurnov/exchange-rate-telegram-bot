@@ -15,7 +15,11 @@ import argparse
 from datetime import datetime
 from typing import List, Tuple, Optional
 from pathlib import Path
-from ..database import ExchangeRateDatabase
+
+# Add parent directory to path to allow imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from database import ExchangeRateDatabase
 
 # Default configuration
 DEFAULT_CSV_FILE = '../data/exchange_rates.csv'
@@ -261,8 +265,8 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
                         )
 
         # Final report
-        logger.info("\n" + "=" * 60)
-        logger.info("MIGRATION COMPLETE" + (" (DRY RUN)" if dry_run else ""))
+        logger.info("\n" + "=" * 60)  # pylint: disable=logging-not-lazy
+        logger.info("MIGRATION COMPLETE" + (" (DRY RUN)" if dry_run else ""))  # pylint: disable=logging-not-lazy
         logger.info("=" * 60)
         logger.info(f"Total CSV lines processed:       {stats['total_lines']}")
         logger.info(f"Valid records:                  {stats['valid_lines']}")
@@ -279,7 +283,7 @@ def migrate_csv_to_sqlite(csv_file: str, db_file: str, dry_run: bool = False):
     except FileNotFoundError:
         logger.error(f"CSV file not found: {csv_file}")
         return 1
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Migration failed: {str(e)}", exc_info=True)
         return 1
 
@@ -309,14 +313,19 @@ Examples:
     )
 
     parser.add_argument(
-        '--csv-file', type=str, default=DEFAULT_CSV_FILE, help=f'Path to CSV file (default: {DEFAULT_CSV_FILE})'
+        '--csv-file',
+        type=str,
+        default=DEFAULT_CSV_FILE,
+        help='Path to CSV file (default: %s)',
+        default=DEFAULT_CSV_FILE,
     )
 
     parser.add_argument(
         '--db-file',
         type=str,
         default=DEFAULT_DB_FILE,
-        help=f'Path to SQLite database file (default: {DEFAULT_DB_FILE})',
+        help='Path to SQLite database file (default: %s)',
+        default=DEFAULT_DB_FILE,
     )
 
     parser.add_argument('--dry-run', action='store_true', help='Perform a dry run without writing to database')
