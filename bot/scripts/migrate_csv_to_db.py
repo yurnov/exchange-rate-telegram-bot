@@ -15,10 +15,7 @@ import argparse
 from datetime import datetime
 from typing import List, Tuple, Optional
 from pathlib import Path
-
-# Add bot directory to path to import database module
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from database import ExchangeRateDatabase
+from ..database import ExchangeRateDatabase
 
 # Default configuration
 DEFAULT_CSV_FILE = '../data/exchange_rates.csv'
@@ -28,8 +25,8 @@ BATCH_SIZE = 1000  # Process records in batches for better performance
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Regex pattern to match CSV lines - using strict float pattern
-CSV_PATTERN = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?)$'
+# Regex pattern to match CSV lines - using simple float pattern
+CSV_PATTERN = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+),([0-9.]+)$'
 
 
 def parse_csv_line(line: str) -> Optional[Tuple]:
