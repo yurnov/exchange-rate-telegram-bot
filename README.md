@@ -6,7 +6,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Publish image](https://github.com/yurnov/exchange-rate-telegram-bot/actions/workflows/release.yml/badge.svg)](https://github.com/yurnov/exchange-rate-telegram-bot/actions/workflows/release.yml)
 
-A lightweight [Telegram bot](https://core.telegram.org/bots/api) running in a Docker container that provides real-time exchange rates for USD 🇺🇸, EUR 🇪🇺, and PLN 🇵🇱 to Ukrainian Hryvnia (UAH 🇺🇦). The bot fetches data from both [Monobank API](https://api.monobank.ua/) and [National Bank of Ukraine (NBU) API](https://bank.gov.ua/).
+A lightweight [Telegram bot](https://core.telegram.org/bots/api) running in a Docker container that provides real-time exchange rates for USD 🇺🇸, EUR 🇪🇺, PLN 🇵🇱, and TRY 🇹🇷 to Ukrainian Hryvnia (UAH 🇺🇦). The bot fetches data from both [Monobank API](https://api.monobank.ua/) and [National Bank of Ukraine (NBU) API](https://bank.gov.ua/).
 
 ## Features
 
@@ -35,6 +35,7 @@ A lightweight [Telegram bot](https://core.telegram.org/bots/api) running in a Do
 | `/usd` | Get USD exchange rates (all sources) |
 | `/eur` | Get EUR exchange rates (all sources) |
 | `/pln` | Get PLN exchange rates (all sources) |
+| `/try` | Get TRY exchange rates (all sources) |
 | `/calc` | Convert currencies (e.g., `/calc 100 USD to UAH`, `/calc 100 EUR to USD`) |
 
 ### Currency Converter Usage
@@ -45,11 +46,13 @@ Convert amounts between currencies using the `/calc` command:
 /calc 100 USD to UAH
 /calc 1000 UAH to EUR
 /calc 500 PLN to UAH
+/calc 100 TRY to UAH
+/calc 500 UAH to TRY
 /calc 100 EUR to USD
 /calc 200 USD to EUR
 ```
 
-**Note**: Conversions must involve UAH (to or from), or be between EUR and USD. The bot uses Monobank sell rates when converting foreign currency to UAH, and buy rates when converting UAH to foreign currency. EUR ↔ USD conversions use the direct exchange rate provided by Monobank.
+**Note**: Conversions must involve UAH (to or from), or be between EUR and USD. The bot uses Monobank sell rates when converting foreign currency to UAH (for USD and EUR), and buy rates when converting UAH to foreign currency. For PLN and TRY, a single cross rate is used for conversions to/from UAH. EUR ↔ USD conversions use the direct exchange rate provided by Monobank.
 
 ## Configuration
 
