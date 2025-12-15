@@ -35,9 +35,11 @@ usd_rate_sell = 0
 eur_rate = 0
 eur_rate_sell = 0
 pln_rate = 0
+try_rate = 0
 usd_rate_nbu = 0
 eur_rate_nbu = 0
 pln_rate_nbu = 0
+try_rate_nbu = 0
 # EUR to USD conversion rates
 eur_usd_rate = 0
 eur_usd_rate_sell = 0
@@ -57,7 +59,7 @@ def get_exchange_rates():
     logger.info("Fetching exchange rates from Monobank API")
 
     # pylint: disable=global-statement
-    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu, eur_usd_rate, eur_usd_rate_sell
+    global usd_rate, usd_rate_sell, eur_rate, eur_rate_sell, pln_rate, try_rate, usd_rate_nbu, eur_rate_nbu, pln_rate_nbu, try_rate_nbu, eur_usd_rate, eur_usd_rate_sell
     # pylint: disable=broad-except
 
     monobank_data = None
@@ -96,6 +98,10 @@ def get_exchange_rates():
                 item for item in monobank_data if item["currencyCodeA"] == 985 and item["currencyCodeB"] == 980
             )["rateCross"]
 
+            try_rate = next(
+                item for item in monobank_data if item["currencyCodeA"] == 949 and item["currencyCodeB"] == 980
+            )["rateCross"]
+
             # EUR to USD rate (currencyCodeA: 978 is EUR, currencyCodeB: 840 is USD)
             eur_usd_item = next(
                 item for item in monobank_data if item["currencyCodeA"] == 978 and item["currencyCodeB"] == 840
@@ -104,7 +110,7 @@ def get_exchange_rates():
             eur_usd_rate_sell = eur_usd_item["rateSell"]
 
             logger.info(
-                f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}. EUR/USD Buy Rate: {eur_usd_rate}. Sell Rate: {eur_usd_rate_sell}"
+                f"USD Buy Rate: {usd_rate}. Sell Rate: {usd_rate_sell}. EUR Buy Rate: {eur_rate}. Sell Rate: {eur_rate_sell}. PLN Exchange Rate: {pln_rate}. TRY Exchange Rate: {try_rate}. EUR/USD Buy Rate: {eur_usd_rate}. Sell Rate: {eur_usd_rate_sell}"
             )
 
         # Store ALL Monobank rates to database if enabled
@@ -171,6 +177,7 @@ def get_exchange_rates():
         usd_rate_nbu = next(item for item in nbu_data if item["cc"] == "USD")["rate"]
         eur_rate_nbu = next(item for item in nbu_data if item["cc"] == "EUR")["rate"]
         pln_rate_nbu = next(item for item in nbu_data if item["cc"] == "PLN")["rate"]
+        try_rate_nbu = next(item for item in nbu_data if item["cc"] == "TRY")["rate"]
 
         # Note: NBU rates are NOT stored in database
         # NBU data is updated infrequently and can be easily retrieved via their historical API
@@ -186,7 +193,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
         rf"Hi {user.mention_html()}, "
-        "I'm an exchange rate bot. I can help you check the current exchange rates for USD, EUR, and PLN in UAH. "
+        "I'm an exchange rate bot. I can help you check the current exchange rates for USD, EUR, PLN, and TRY in UAH. "
         "Use /mono to get Monobank exchange rates or /nbu to get NBU exchange rates. "
         "You can also use /help to see all available commands."
     )
@@ -204,6 +211,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/usd - Get USD exchange rates.\n"
         "/eur - Get EUR exchange rates.\n"
         "/pln - Get PLN exchange rates.\n"
+        "/try - Get TRY exchange rates.\n"
         "/calc - Convert currencies (e.g., /calc 100 USD to UAH, /calc 100 EUR to USD).\n\n"
         "All rates are based on 🇺🇦 Ukrainian Hryvnia (UAH ₴).\n"
         "EUR ↔ USD conversion is also supported.\n\n"
@@ -218,7 +226,8 @@ async def rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
             f"🇺🇸 USD:\n  Buy Rate: {usd_rate}\n  Sell Rate: {usd_rate_sell}\n  NBU Rate: {usd_rate_nbu}\n\n"
             f"🇪🇺 EUR:\n  Buy Rate: {eur_rate}\n  Sell Rate: {eur_rate_sell}\n  NBU Rate: {eur_rate_nbu}\n\n"
-            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}"
+            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n  NBU Rate: {pln_rate_nbu}\n\n"
+            f"🇹🇷 TRY:\n  Exchange Rate: {try_rate}\n  NBU Rate: {try_rate_nbu}"
         )
         logger.info(f"Exchange rates sent to user {update.effective_user.id}")
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -233,7 +242,8 @@ async def mono_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
             f"🇺🇸 USD:\n  Buy Rate: {usd_rate}\n  Sell Rate: {usd_rate_sell}\n\n"
             f"🇪🇺 EUR:\n  Buy Rate: {eur_rate}\n  Sell Rate: {eur_rate_sell}\n\n"
-            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}"
+            f"🇵🇱 PLN:\n  Exchange Rate: {pln_rate}\n\n"
+            f"🇹🇷 TRY:\n  Exchange Rate: {try_rate}"
         )
         logger.info(f"Monobank rates sent to user {update.effective_user.id}")
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -245,7 +255,7 @@ async def nbu_rate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f"User {update.effective_user.id} requested NBU rates.")
     try:
         await update.message.reply_text(
-            f"NBU Rates:\n🇺🇸 USD: {usd_rate_nbu}\n🇪🇺 EUR: {eur_rate_nbu}\n🇵🇱 PLN: {pln_rate_nbu}"
+            f"NBU Rates:\n🇺🇸 USD: {usd_rate_nbu}\n🇪🇺 EUR: {eur_rate_nbu}\n🇵🇱 PLN: {pln_rate_nbu}\n🇹🇷 TRY: {try_rate_nbu}"
         )
         logger.info(f"NBU rates sent to user {update.effective_user.id}")
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -288,11 +298,21 @@ async def pln(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Error fetching exchange rates: {str(e)}")
 
 
+async def try_currency(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info(f"User {update.effective_user.id} requested exchange rates.")
+    try:
+        await update.message.reply_text(f"🇹🇷 TRY:\n  Exchange Rate: {try_rate}\n  NBU Rate: {try_rate_nbu}")
+        logger.info(f"Exchange rates sent to user {update.effective_user.id}")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        await update.message.reply_text("An error occurred. Please try again later.")
+        logger.error(f"Error fetching exchange rates: {str(e)}")
+
+
 def convert_currency(amount: float, from_currency: str, to_currency: str) -> tuple[float | None, None]:
     """
     Convert currency using Monobank rates.
     For USD and EUR: uses sell rate when converting TO UAH, buy rate when converting FROM UAH
-    For PLN: uses single cross rate
+    For PLN and TRY: uses single cross rate
     For EUR <-> USD: uses direct EUR/USD rates from Monobank
 
     Returns: (result, None) tuple where result is the converted amount or None if conversion fails
@@ -348,6 +368,18 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> tup
             return None, None
         return amount / eur_usd_rate, None
 
+    # UAH -> TRY (single rate)
+    if from_curr == "UAH" and to_curr == "TRY":
+        if try_rate == 0:
+            return None, None
+        return amount / try_rate, None
+
+    # TRY -> UAH (single rate)
+    if from_curr == "TRY" and to_curr == "UAH":
+        if try_rate == 0:
+            return None, None
+        return amount * try_rate, None
+
     return None, None
 
 
@@ -367,13 +399,13 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "  /calc 1000 UAH to EUR\n"
             "  /calc 500 PLN to UAH\n"
             "  /calc 100 EUR to USD\n\n"
-            "Supported currencies: USD, EUR, PLN, UAH"
+            "Supported currencies: USD, EUR, PLN, TRY, UAH"
         )
         return
 
     # Parse the conversion request
     # Pattern: <amount> <currency> to <currency>
-    pattern = r'(\d+(?:\.\d+)?)\s*(USD|EUR|PLN|UAH)\s+to\s+(USD|EUR|PLN|UAH)'
+    pattern = r'(\d+(?:\.\d+)?)\s*(USD|EUR|PLN|TRY|UAH)\s+to\s+(USD|EUR|PLN|TRY|UAH)'
     match = re.match(pattern, text, re.IGNORECASE)
 
     if not match:
@@ -414,7 +446,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     # Currency flags
-    flags = {"USD": "🇺🇸", "EUR": "🇪🇺", "PLN": "🇵🇱", "UAH": "🇺🇦"}
+    flags = {"USD": "🇺🇸", "EUR": "🇪🇺", "PLN": "🇵🇱", "TRY": "🇹🇷", "UAH": "🇺🇦"}
 
     from_flag = flags.get(from_currency, "")
     to_flag = flags.get(to_currency, "")
@@ -433,8 +465,10 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             rate_info = f"(sell rate: {eur_rate_sell})"
         else:  # to_currency == "EUR"
             rate_info = f"(buy rate: {eur_rate})"
-    else:
+    elif from_currency == "PLN" or to_currency == "PLN":
         rate_info = f"(rate: {pln_rate})"
+    else:
+        rate_info = f"(rate: {try_rate})"
 
     await update.message.reply_text(
         f"{from_flag} {amount:.2f} {from_currency} = {to_flag} {result:.2f} {to_currency}\n{rate_info}"
@@ -559,6 +593,7 @@ def main() -> None:
     application.add_handler(CommandHandler("usd", usd))
     application.add_handler(CommandHandler("eur", eur))
     application.add_handler(CommandHandler("pln", pln))
+    application.add_handler(CommandHandler("try", try_currency))
     application.add_handler(CommandHandler("calc", calc))
     # Catch-all handlers for unrecognized input - must be added AFTER all specific CommandHandlers
     # Handle non-command text messages (e.g., "calc" without slash)
