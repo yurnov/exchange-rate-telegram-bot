@@ -467,8 +467,10 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             rate_info = f"(buy rate: {eur_rate})"
     elif from_currency == "PLN" or to_currency == "PLN":
         rate_info = f"(rate: {pln_rate})"
-    else:
+    elif from_currency == "TRY" or to_currency == "TRY":
         rate_info = f"(rate: {try_rate})"
+    else:
+        rate_info = "(rate: N/A)"
 
     await update.message.reply_text(
         f"{from_flag} {amount:.2f} {from_currency} = {to_flag} {result:.2f} {to_currency}\n{rate_info}"
