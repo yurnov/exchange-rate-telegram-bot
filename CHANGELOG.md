@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.0
+
+[Added support of Turkish lira](https://github.com/yurnov/exchange-rate-telegram-bot/pull/46)
+
 ## v0.8.0
 
 [Support of SQLite database implemented](https://github.com/yurnov/exchange-rate-telegram-bot/pull/25)
