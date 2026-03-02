@@ -7,3 +7,16 @@ services:
       - ./data:/bot/data
     env_file: .env
     restart: unless-stopped
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: exchange-rate-bot-backup
+    volumes:
+      - ./data:/bot/data:ro
+    env_file: .env.backup
+    restart: unless-stopped
+    depends_on:
+      - bot
+    profiles:
+      - backup
