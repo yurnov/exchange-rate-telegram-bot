@@ -68,6 +68,8 @@ def create_backup(db_path: str, backup_path: str) -> bool:
         return False
 
     try:
+        # Use longer timeout than the main bot's busy_timeout (5s) because
+        # backup reads the entire database and may need to wait for ongoing writes
         source_conn = sqlite3.connect(db_path, timeout=30)
         backup_conn = sqlite3.connect(backup_path)
         source_conn.backup(backup_conn)

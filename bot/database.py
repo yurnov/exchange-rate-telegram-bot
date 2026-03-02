@@ -333,6 +333,8 @@ class ExchangeRateDatabase:
         """
         if self.conn:
             try:
+                # PRAGMA does not support parameterized queries, so validate input
+                pages = int(pages)
                 self.conn.execute(f"PRAGMA incremental_vacuum({pages})")
                 logger.info("Incremental vacuum completed successfully")
             except Exception as e:  # pylint: disable=broad-exception-caught
