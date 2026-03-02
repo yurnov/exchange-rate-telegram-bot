@@ -26,10 +26,11 @@ and adding S3-compatible backup support for the Exchange Rate Telegram Bot.
 **Improvements implemented:**
 - **WAL checkpoint on close:** Ensures all WAL changes are written back to the main database
   file when the bot shuts down cleanly (`PRAGMA wal_checkpoint(TRUNCATE)`)
-- **`PRAGMA synchronous=NORMAL`:** Safe with WAL mode and provides significantly better
-  write performance vs the default `FULL` mode. In WAL mode, `NORMAL` guarantees durability
-  against process crashes (data is only at risk during OS-level crash, which is acceptable
-  for exchange rate data that can be re-fetched)
+- **`PRAGMA synchronous=FULL`:** Maximum durability — ensures every committed transaction is
+  on disk before continuing. Critical in resource-constrained environments where the container
+  can be evicted (SIGKILL) at any time. While `NORMAL` would offer better write throughput,
+  `FULL` is the right choice when fault-tolerance is the priority and the write pattern is
+  light (a few inserts every few minutes)
 - **`PRAGMA busy_timeout=5000`:** Prevents `database is locked` errors by waiting up to
   5 seconds for locks to be released, which is important when backup operations run
   concurrently with the main bot
@@ -44,24 +45,29 @@ and adding S3-compatible backup support for the Exchange Rate Telegram Bot.
 | `FULL` | Automatically reclaims space after each transaction | No manual intervention needed | Small write overhead per transaction |
 | `INCREMENTAL` | Reclaims space only when `PRAGMA incremental_vacuum` is called | Fine-grained control over when vacuuming occurs | Requires explicit scheduling |
 
-**Decision: `INCREMENTAL` autovacuum**
+**Decision: `FULL` autovacuum**
 
 Rationale:
-- Exchange rate data is append-only (INSERT OR IGNORE), so deletions are rare
-- `INCREMENTAL` mode allows vacuuming during low-activity periods
-- Avoids the per-transaction overhead of `FULL` mode
-- The bot can run `incremental_vacuum` periodically (e.g., daily) via the scheduled task system
+- Exchange rate data is append-only (INSERT OR IGNORE), so deletions are rare, but when
+  they occur, space should be reclaimed immediately to keep the DB file small
+- In a resource-constrained environment where the container may be evicted at any time,
+  `FULL` mode ensures space is reclaimed automatically after each transaction
+- `INCREMENTAL` mode requires explicit scheduling of `PRAGMA incremental_vacuum` calls,
+  which may never execute if the container is evicted before the scheduled time
+- The per-transaction overhead of `FULL` mode is negligible for the bot's light write
+  pattern (a few inserts every few minutes)
 
 **Note:** `auto_vacuum` must be set before the first table is created. For existing databases,
 a `VACUUM` command is needed to change the mode, which rewrites the entire database file.
 
 ### 1.3 Cache Size
 
-**Improvement:** `PRAGMA cache_size=-8000` (8MB cache)
+**Decision:** Use SQLite default cache size (2MB)
 
-The default SQLite cache is 2MB. Since the exchange rate database may grow with historical
-data for ~130 currency pairs, increasing the cache improves read performance for queries
-and reduces disk I/O.
+In a resource-constrained environment where the container is frequently evicted due to
+memory pressure, keeping the default 2MB cache avoids contributing to memory consumption.
+The bot's write pattern (periodic inserts every few minutes) does not benefit significantly
+from a larger cache.
 
 ---
 

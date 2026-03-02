@@ -46,18 +46,20 @@ class ExchangeRateDatabase:
             # 2. All database operations happen in the same thread (scheduled task)
             # 3. SQLite WAL mode provides process-level concurrency if needed
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            # Enable incremental autovacuum (must be set before any tables are created)
-            self.conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+            # Enable full autovacuum — reclaims space after each transaction automatically.
+            # Preferred over INCREMENTAL in resource-constrained environments where the
+            # container may be evicted before a scheduled vacuum ever runs.
+            self.conn.execute("PRAGMA auto_vacuum=FULL")
             # Enable WAL mode for better concurrent access
             self.conn.execute("PRAGMA journal_mode=WAL")
             # Enable foreign key constraints
             self.conn.execute("PRAGMA foreign_keys=ON")
-            # Use NORMAL synchronous mode — safe with WAL, better write performance
-            self.conn.execute("PRAGMA synchronous=NORMAL")
+            # Use FULL synchronous mode for maximum durability — ensures every committed
+            # transaction is on disk before continuing. Critical in environments where the
+            # container can be evicted (SIGKILL) at any time due to resource constraints.
+            self.conn.execute("PRAGMA synchronous=FULL")
             # Wait up to 5 seconds for locks (prevents "database is locked" errors during backup)
             self.conn.execute("PRAGMA busy_timeout=5000")
-            # Increase cache size to 8MB for better read performance with large datasets
-            self.conn.execute("PRAGMA cache_size=-8000")
             logger.info(f"Connected to database: {self.db_path}")
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error(f"Error connecting to database: {str(e)}")
