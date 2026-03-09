@@ -47,7 +47,7 @@ jobs:
       - name: Login to GitHub Container Registry
         # do this step only on push to main and do not run for pull request
         if: github.event_name == 'push'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           push: ${{ github.ref == 'refs/heads/development' }}
           registry: ghcr.io
