@@ -1,5 +1,16 @@
 name: exchange-rate-telegram-bot
 services:
+  backup:
+    image: ghcr.io/yurnov/xratebot-backup:dev
+    container_name: exchange-rate-bot-backup
+    depends_on:
+      - bot
+    volumes:
+      - ./data:/bot/data:ro
+    env_file: .env.backup
+    restart: unless-stopped
+    profiles:
+      - backup
   bot:
     image: ghcr.io/yurnov/xratebot:dev
     container_name: exchange-rate-bot
@@ -7,14 +18,3 @@ services:
       - ./data:/bot/data
     env_file: .env
     restart: unless-stopped
-  backup:
-    image: ghcr.io/yurnov/xratebot-backup:dev
-    container_name: exchange-rate-bot-backup
-    volumes:
-      - ./data:/bot/data:ro
-    env_file: .env.backup
-    restart: unless-stopped
-    depends_on:
-      - bot
-    profiles:
-      - backup
