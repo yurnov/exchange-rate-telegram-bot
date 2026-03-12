@@ -282,13 +282,15 @@ schedule
 
 ```
 exchange-rate-telegram-bot/
+├── backup/
+│   ├── Dockerfile        # Backup container definition
+│   └── requirements.txt  # Backup sidecar dependencies (boto3)
 ├── bot/
 │   ├── main.py           # Main bot application
 │   └── backup.py         # Database backup script
 ├── .env.example          # Environment variables template
 ├── .env.backup.example   # Backup environment variables template
 ├── Dockerfile            # Docker container definition
-├── Dockerfile.backup     # Backup container definition
 ├── CHANGELOG.md          # Version history
 ├── LICENSE               # MIT License
 └── README.md            # This file

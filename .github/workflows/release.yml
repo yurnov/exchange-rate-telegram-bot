@@ -105,7 +105,7 @@ jobs:
           context: .
           # push to registry when merge to main
           push: ${{ github.ref == 'refs/heads/main' }}
-          file: Dockerfile.backup
+          file: backup/Dockerfile
           no-cache: true
           tags: |
             ghcr.io/yurnov/xratebot-backup:latest

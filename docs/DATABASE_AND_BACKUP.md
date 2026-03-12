@@ -181,15 +181,14 @@ To enable backup: `docker compose --profile backup up -d`
 
 ```
 exchange-rate-telegram-bot/
+├── backup/
+│   ├── Dockerfile            # Backup sidecar container
+│   └── requirements.txt      # Backup sidecar dependencies (boto3)
 ├── bot/
-│   ├── main.py              # Main bot (unchanged interface)
-│   ├── database.py           # Enhanced with autovacuum, checkpoint, backup method
-│   └── backup.py             # Standalone S3 backup script
-├── Dockerfile                # Main bot container (unchanged)
-├── Dockerfile.backup         # Backup sidecar container
-├── docker-compose.yml        # Updated with optional backup service
-├── requirements.txt          # Main bot dependencies (unchanged)
-├── requirements-backup.txt   # Backup sidecar dependencies (boto3)
+│   ├── main.py               # Main bot application
+│   └── backup.py             # Backup database snapshot script
+├── data/
+│   └── exchange_rates.db     # SQLite database
 ├── .env.example              # Updated with new DB and backup variables
 └── docs                      # Documentation and examples
 ```

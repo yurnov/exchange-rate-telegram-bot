@@ -81,7 +81,7 @@ jobs:
           context: .
           # push to registry when merge to development
           push: ${{ github.ref == 'refs/heads/development' }}
-          file: Dockerfile.backup
+          file: backup/Dockerfile
           no-cache: true
           tags: ghcr.io/yurnov/xratebot-backup:dev
           build-args: |

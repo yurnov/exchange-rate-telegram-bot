@@ -13,12 +13,13 @@ Usage:
     python backup.py                  # Scheduled mode (default)
     BACKUP_MODE=once python backup.py # One-shot mode
 
-Required environment variables:
+Required environment variables (if backup enabled):
     S3_BUCKET      - Target S3 bucket name
     S3_ACCESS_KEY  - S3 access key ID
     S3_SECRET_KEY  - S3 secret access key
 
 Optional environment variables:
+    BACKUP_ENABLED     - Enable backup sidecar container (default: false)
     S3_ENDPOINT_URL    - S3-compatible endpoint URL (default: None, uses AWS)
     S3_PREFIX          - Key prefix for backup files (default: backups/)
     S3_REGION          - AWS region (default: us-east-1)

@@ -15,8 +15,8 @@ LABEL org.opencontainers.image.title="Exchange Rate Bot - Database Backup" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${GIT_COMMIT}"
 
-RUN --mount=type=bind,source=./requirements-backup.txt,target=/tmp/requirements-backup.txt \
-    python -m pip install --no-cache-dir -r /tmp/requirements-backup.txt
+RUN --mount=type=bind,source=./backup/requirements.txt,target=/tmp/requirements.txt \
+    python -m pip install --no-cache-dir -r /tmp/requirements.txt
 
 WORKDIR /bot
 
