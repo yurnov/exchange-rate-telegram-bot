@@ -226,6 +226,11 @@ def main():
     # Set logging level
     logger.setLevel(log_level.upper())
 
+    # Check if backup is enabled
+    if not os.getenv('BACKUP_ENABLED', 'false').lower() in ['true', '1', 'yes', 'on', 'enabled' ]:
+        logger.info("Backup is disabled. Set BACKUP_ENABLED=true to enable.")
+        sys.exit(0)
+
     # Ensure S3 prefix ends with /
     if s3_prefix and not s3_prefix.endswith('/'):
         s3_prefix += '/'
@@ -255,14 +260,18 @@ def main():
 
     if backup_mode == 'once':
         # One-shot mode: run single backup and exit
+        logger.info("Starting one-shot backup")
         success = run_backup(db_path, s3_client, s3_bucket, s3_prefix, backup_retention)
         sys.exit(0 if success else 1)
     else:
         # Scheduled mode: run continuously
         logger.info(f"Starting scheduled backup every {backup_interval} seconds")
         while True:
-            run_backup(db_path, s3_client, s3_bucket, s3_prefix, backup_retention)
-            logger.info(f"Next backup in {backup_interval} seconds")
+            success = run_backup(db_path, s3_client, s3_bucket, s3_prefix, backup_retention)
+            if not success:
+                logger.error("Backup failed. Retrying in %d seconds...", backup_interval)
+            else:
+                logger.info(f"Backup compleated, next backup in {backup_interval} seconds")
             time.sleep(backup_interval)
 
 

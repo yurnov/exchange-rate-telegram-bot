@@ -191,6 +191,5 @@ exchange-rate-telegram-bot/
 ├── requirements.txt          # Main bot dependencies (unchanged)
 ├── requirements-backup.txt   # Backup sidecar dependencies (boto3)
 ├── .env.example              # Updated with new DB and backup variables
-└── docs/
-    └── DATABASE_AND_BACKUP.md # This document
+└── docs                      # Documentation and examples
 ```

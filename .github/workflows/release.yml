@@ -59,6 +59,8 @@ jobs:
         run: |
           sed -i -E 's|ghcr\.io/yurnov/xratebot:v[0-9]+\.[0-9]+\.[0-9]+|ghcr.io/yurnov/xratebot:${{ steps.tag_version.outputs.new_tag }}|g' docker-compose.yml
           sed -i -E 's|ghcr\.io/yurnov/xratebot:dev|ghcr.io/yurnov/xratebot:${{ steps.tag_version.outputs.new_tag }}|g' docker-compose.yml
+          sed -i -E 's|ghcr\.io/yurnov/xratebot-backup:v[0-9]+\.[0-9]+\.[0-9]+|ghcr.io/yurnov/xratebot-backup:${{ steps.tag_version.outputs.new_tag }}|g' docker-compose.yml
+          sed -i -E 's|ghcr\.io/yurnov/xratebot-backup:dev|ghcr.io/yurnov/xratebot-backup:${{ steps.tag_version.outputs.new_tag }}|g' docker-compose.yml
 
       - name: Commit changes
         if: steps.tag_version.outputs.new_tag != null
@@ -92,6 +94,22 @@ jobs:
           tags: |
             ghcr.io/yurnov/xratebot:latest
             ghcr.io/yurnov/xratebot:${{ steps.tag_version.outputs.new_tag }}
+          build-args: |
+            VERSION=${{ steps.tag_version.outputs.new_tag }}
+            BUILD_DATE=${{ steps.date.outputs.date }}
+            GIT_COMMIT=${{ steps.commit_changes.outputs.commit_hash }}
+
+      - name: Build Docker image of backup sidecar container and push to registry
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # push to registry when merge to main
+          push: ${{ github.ref == 'refs/heads/main' }}
+          file: Dockerfile.backup
+          no-cache: true
+          tags: |
+            ghcr.io/yurnov/xratebot-backup:latest
+            ghcr.io/yurnov/xratebot-backup:${{ steps.tag_version.outputs.new_tag }}
           build-args: |
             VERSION=${{ steps.tag_version.outputs.new_tag }}
             BUILD_DATE=${{ steps.date.outputs.date }}

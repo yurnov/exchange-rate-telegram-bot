@@ -1,16 +1,14 @@
 name: exchange-rate-telegram-bot
 services:
   bot:
-    image: ghcr.io/yurnov/xratebot:v0.9.0
+    image: ghcr.io/yurnov/xratebot:dev
     container_name: exchange-rate-bot
     volumes:
       - ./data:/bot/data
     env_file: .env
     restart: unless-stopped
   backup:
-    build:
-      context: .
-      dockerfile: Dockerfile.backup
+    image: ghcr.io/yurnov/xratebot-backup:dev
     container_name: exchange-rate-bot-backup
     volumes:
       - ./data:/bot/data:ro

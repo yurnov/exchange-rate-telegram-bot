@@ -74,3 +74,17 @@ jobs:
             VERSION=dev
             BUILD_DATE=${{ steps.date.outputs.date }}
             GIT_COMMIT=${{ steps.commit.outputs.commit }}
+
+      - name: Build Docker image of backup sidecar container for development version and push to registry
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # push to registry when merge to development
+          push: ${{ github.ref == 'refs/heads/development' }}
+          file: Dockerfile.backup
+          no-cache: true
+          tags: ghcr.io/yurnov/xratebot-backup:dev
+          build-args: |
+            VERSION=dev
+            BUILD_DATE=${{ steps.date.outputs.date }}
+            GIT_COMMIT=${{ steps.commit.outputs.commit }}
