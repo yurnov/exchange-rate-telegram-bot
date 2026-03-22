@@ -1,6 +1,5 @@
 # ENV and project specific files
 .env
-.env.backup
 exchange_rates.csv
 data/*.csv
 data/*.png

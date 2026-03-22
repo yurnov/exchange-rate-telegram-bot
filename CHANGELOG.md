@@ -1,9 +1,5 @@
 # Changelog
 
-## v0.10.0
-
-[Added support of backup sidecar container](https://github.com/yurnov/exchange-rate-telegram-bot/pull/48)
-
 ## v0.9.0
 
 [Added support of Turkish lira](https://github.com/yurnov/exchange-rate-telegram-bot/pull/46)
