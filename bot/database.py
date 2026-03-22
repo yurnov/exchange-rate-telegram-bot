@@ -46,10 +46,20 @@ class ExchangeRateDatabase:
             # 2. All database operations happen in the same thread (scheduled task)
             # 3. SQLite WAL mode provides process-level concurrency if needed
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            # Enable full autovacuum — reclaims space after each transaction automatically.
+            # Preferred over INCREMENTAL in resource-constrained environments where the
+            # container may be evicted before a scheduled vacuum ever runs.
+            self.conn.execute("PRAGMA auto_vacuum=FULL")
             # Enable WAL mode for better concurrent access
             self.conn.execute("PRAGMA journal_mode=WAL")
             # Enable foreign key constraints
             self.conn.execute("PRAGMA foreign_keys=ON")
+            # Use FULL synchronous mode for maximum durability — ensures every committed
+            # transaction is on disk before continuing. Critical in environments where the
+            # container can be evicted (SIGKILL) at any time due to resource constraints.
+            self.conn.execute("PRAGMA synchronous=FULL")
+            # Wait up to 5 seconds for locks (prevents "database is locked" errors during backup)
+            self.conn.execute("PRAGMA busy_timeout=5000")
             logger.info(f"Connected to database: {self.db_path}")
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.error(f"Error connecting to database: {str(e)}")
@@ -61,16 +71,14 @@ class ExchangeRateDatabase:
             cursor = self.conn.cursor()
 
             # Create currencies reference table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS currencies (
                     code INTEGER PRIMARY KEY,
                     alpha_code TEXT NOT NULL,
                     name TEXT,
                     symbol TEXT
                 )
-            """
-            )
+            """)
 
             # Insert common currency codes from Monobank/NBU APIs
             currencies = [
@@ -188,8 +196,7 @@ class ExchangeRateDatabase:
             )
 
             # Create main exchange rates table with dual timestamps
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS exchange_rates (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp DATETIME NOT NULL,
@@ -204,8 +211,7 @@ class ExchangeRateDatabase:
                     FOREIGN KEY (currency_code_a) REFERENCES currencies(code),
                     FOREIGN KEY (currency_code_b) REFERENCES currencies(code)
                 )
-            """
-            )
+            """)
 
             # Create indexes for efficient queries
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_rates_timestamp ON exchange_rates(timestamp)")
@@ -302,9 +308,73 @@ class ExchangeRateDatabase:
             self.conn.rollback()
             return 0, len(rates)
 
-    def close(self):
-        """Close database connection."""
+    def checkpoint(self):
+        """
+        Perform a WAL checkpoint to write WAL contents back to the main database file.
+
+        Uses TRUNCATE mode which resets the WAL file to zero bytes after checkpoint,
+        ensuring the -wal and -shm files are cleaned up.
+        """
         if self.conn:
+            try:
+                self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                logger.info("WAL checkpoint completed successfully")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error(f"Error during WAL checkpoint: {str(e)}")
+
+    def incremental_vacuum(self, pages: int = 0):
+        """
+        Reclaim free pages from the database file.
+
+        Args:
+            pages: Number of pages to vacuum. 0 means vacuum all free pages.
+        """
+        if self.conn:
+            try:
+                # PRAGMA does not support parameterized queries, so validate input
+                pages = int(pages)
+                self.conn.execute(f"PRAGMA incremental_vacuum({pages})")
+                logger.info("Incremental vacuum completed successfully")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.error(f"Error during incremental vacuum: {str(e)}")
+
+    def backup(self, backup_path: str) -> bool:
+        """
+        Create a safe backup of the database using SQLite's online backup API.
+
+        This method is safe to call while the database is in use — it handles
+        WAL mode correctly and produces a consistent backup.
+
+        Args:
+            backup_path: Path for the backup database file
+
+        Returns:
+            True if backup was successful, False otherwise
+        """
+        if not self.conn:
+            logger.error("Cannot backup: no database connection")
+            return False
+
+        try:
+            # Ensure backup directory exists
+            backup_dir = os.path.dirname(backup_path)
+            if backup_dir and not os.path.exists(backup_dir):
+                os.makedirs(backup_dir)
+
+            backup_conn = sqlite3.connect(backup_path)
+            self.conn.backup(backup_conn)
+            backup_conn.close()
+            logger.info(f"Database backup created: {backup_path}")
+            return True
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error(f"Error creating database backup: {str(e)}")
+            return False
+
+    def close(self):
+        """Close database connection with WAL checkpoint."""
+        if self.conn:
+            # Checkpoint WAL before closing to ensure all data is in the main database file
+            self.checkpoint()
             self.conn.close()
             logger.info("Database connection closed")
 

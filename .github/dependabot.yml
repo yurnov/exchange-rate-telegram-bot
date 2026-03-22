@@ -33,3 +33,19 @@ updates:
           - "*"
     commit-message:
       prefix: "feat(deps): "
+  # Docker (Backup sidecar)
+  - package-ecosystem: "docker"
+    directory: "/backup"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+    commit-message:
+      prefix: "feat(deps): "
+  # Python (Backup sidecar)
+  - package-ecosystem: "pip"
+    directory: "/backup"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "feat(deps): "
