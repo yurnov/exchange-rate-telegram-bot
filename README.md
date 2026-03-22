@@ -211,6 +211,51 @@ docker run --rm -d \
 
 Start a conversation with the hosted bot: [@mono_rate_bot](https://t.me/mono_rate_bot)
 
+## Database Backup
+
+The bot includes an optional backup container that can securely upload SQLite database snapshots to any S3-compatible object storage.
+
+### Enabling and Configuring Backup
+
+1. Copy the example backup environment file:
+
+```bash
+cp .env.backup.example .env.backup
+```
+
+2. Edit `.env.backup` and configure your credentials:
+   - Set `BACKUP_ENABLED=true`
+   - Define S3 configuration (`S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`)
+   - If using an alternative S3 provider (like MinIO, Cloudflare R2, DigitalOcean), uncomment and configure `S3_ENDPOINT_URL`
+
+### Running Backup Once
+
+To execute a single backup instance and promptly exit (e.g., when executed from an external cron job), use the `once` backup mode.
+
+**Using Docker Compose:**
+
+```bash
+docker compose run --rm -e BACKUP_MODE=once backup
+```
+
+**Using Docker CLI:**
+
+```bash
+docker run --rm \
+  --env-file .env.backup \
+  -e BACKUP_MODE=once \
+  -v ./data:/bot/data:ro \
+  ghcr.io/yurnov/xratebot-backup:latest
+```
+
+### Running Scheduled Backup
+
+To run the backup container continuously to process backups on a set schedule (defined by the `BACKUP_INTERVAL` variable), run Docker compose with the backup profile:
+
+```bash
+docker compose --profile backup up -d
+```
+
 ## Technical Details
 
 ### Architecture
@@ -237,9 +282,14 @@ schedule
 
 ```
 exchange-rate-telegram-bot/
+├── backup/
+│   ├── Dockerfile        # Backup container definition
+│   └── requirements.txt  # Backup sidecar dependencies (boto3)
 ├── bot/
-│   └── main.py           # Main bot application
+│   ├── main.py           # Main bot application
+│   └── backup.py         # Database backup script
 ├── .env.example          # Environment variables template
+├── .env.backup.example   # Backup environment variables template
 ├── Dockerfile            # Docker container definition
 ├── CHANGELOG.md          # Version history
 ├── LICENSE               # MIT License
