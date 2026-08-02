@@ -244,9 +244,15 @@ docker compose run --rm -e BACKUP_MODE=once backup
 docker run --rm \
   --env-file .env.backup \
   -e BACKUP_MODE=once \
+  -e BACKUP_TMPDIR=/backup/work \
+  -e BACKUP_STATUS_FILE=/backup/work/last_backup.json \
+  --memory 192m --cpus 0.5 \
   -v ./data:/bot/data:ro \
+  -v exchange-rate-telegram-bot_backup-work:/backup/work \
   ghcr.io/yurnov/xratebot-backup:latest
 ```
+
+> The data volume is mounted read-only. SQLite needs the `-shm` file to read a database in WAL mode and cannot create one on a read-only mount, so the bot container must be running (it holds that file open). If it is not, the backup fails with `attempt to write a readonly database`.
 
 ### Running Scheduled Backup
 
@@ -254,6 +260,48 @@ To run the backup container continuously to process backups on a set schedule (d
 
 ```bash
 docker compose --profile backup up -d
+```
+
+### Backup Resource Usage
+
+The backup is designed to stay out of the way on a small VM (512 MiB RAM, one shared vCPU), where a naive "copy the database, then upload it" backup can drive the load average into the double digits and make the host unreachable. What it does:
+
+| Behaviour | Why it matters |
+| --- | --- |
+| `VACUUM INTO` snapshot (`BACKUP_METHOD`) | Skips free pages, so the snapshot is smaller than the database, and — unlike the online backup API — it is never restarted from scratch when the bot writes mid-copy |
+| Snapshot staged on a mounted volume (`BACKUP_TMPDIR`) | Keeps a multi-hundred-megabyte temporary file out of the container layer, and off `tmpfs`, where it would consume RAM |
+| `fsync` + `posix_fadvise(DONTNEED)` every 64 MiB (`BACKUP_DROP_CACHE`) | The kernel never accumulates the whole snapshot as dirty pages, so it never stalls the host — including `sshd` — while flushing them |
+| Gzip level 1 by default (`BACKUP_COMPRESS`, `BACKUP_COMPRESS_LEVEL`) | Typically a 5-10x smaller upload for very little CPU; shortening the upload also saves TLS work |
+| Single upload thread with bounded buffers (`BACKUP_UPLOAD_CONCURRENCY`, `BACKUP_MULTIPART_CHUNKSIZE`) | boto3 defaults to 10 concurrent 8 MiB parts — ~80 MiB of buffers plus TLS on ten threads, which is enough to get the process OOM-killed before it can log anything |
+| `nice 19` and the idle I/O class (`BACKUP_NICE`, `BACKUP_IONICE`) | The backup only gets CPU and disk that nothing else wants, so the bot stays responsive |
+| Memory and CPU caps in `docker-compose.yml` | If a backup no longer fits, it is OOM-killed inside its own cgroup instead of taking the host down |
+| Batched retention deletes, or none at all (`BACKUP_RETENTION`) | One `DeleteObjects` call instead of one request per object; `BACKUP_RETENTION=0` hands expiry to an S3 lifecycle rule, which costs the host nothing |
+| Hard timeout (`BACKUP_TIMEOUT`) | A stalled upload fails and is retried instead of hanging forever |
+
+For a ~0.5 GB database this typically means around 50-100 MiB uploaded per run and a peak RSS well under 100 MiB.
+
+Tuning knobs live in `.env.backup`; the container's memory and CPU caps live in `docker-compose.yml`:
+
+```yaml
+    cpus: 0.5
+    mem_limit: 192m
+    memswap_limit: 192m
+```
+
+### Troubleshooting Backups
+
+Every cycle writes a JSON summary and a log file to the `backup-work` volume, so a failure can be diagnosed after the fact — useful when the host was too busy to accept an ssh connection at the time:
+
+```bash
+docker run --rm -v exchange-rate-telegram-bot_backup-work:/w alpine cat /w/last_backup.json
+docker run --rm -v exchange-rate-telegram-bot_backup-work:/w alpine tail -50 /w/backup.log
+```
+
+The `phase` field of `last_backup.json` (`snapshot`, `compress`, `upload`, `cleanup`, `done`) shows where a run stopped. If the file says nothing at all and the container exited unexpectedly, the process was killed rather than failing:
+
+```bash
+docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' exchange-rate-bot-backup
+dmesg -T | grep -i -E 'oom|killed process'
 ```
 
 ## Technical Details
