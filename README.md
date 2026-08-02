@@ -271,22 +271,26 @@ The backup is designed to stay out of the way on a small VM (512 MiB RAM, one sh
 | `VACUUM INTO` snapshot (`BACKUP_METHOD`) | Skips free pages, so the snapshot is smaller than the database, and — unlike the online backup API — it is never restarted from scratch when the bot writes mid-copy |
 | Snapshot staged on a mounted volume (`BACKUP_TMPDIR`) | Keeps a multi-hundred-megabyte temporary file out of the container layer, and off `tmpfs`, where it would consume RAM |
 | `fsync` + `posix_fadvise(DONTNEED)` every 64 MiB (`BACKUP_DROP_CACHE`) | The kernel never accumulates the whole snapshot as dirty pages, so it never stalls the host — including `sshd` — while flushing them |
-| Gzip level 1 by default (`BACKUP_COMPRESS`, `BACKUP_COMPRESS_LEVEL`) | Typically a 5-10x smaller upload for very little CPU; shortening the upload also saves TLS work |
+| Gzip streamed into the upload (`BACKUP_COMPRESS`, `BACKUP_COMPRESS_LEVEL`) | The snapshot is read exactly once and no compressed copy is written to disk. Typically a 5-10x smaller upload for very little CPU; a shorter upload is also less TLS work. On a slow disk, avoiding the extra read and write matters more than the compression itself |
 | Single upload thread with bounded buffers (`BACKUP_UPLOAD_CONCURRENCY`, `BACKUP_MULTIPART_CHUNKSIZE`) | boto3 defaults to 10 concurrent 8 MiB parts — ~80 MiB of buffers plus TLS on ten threads, which is enough to get the process OOM-killed before it can log anything |
-| `nice 19` and the idle I/O class (`BACKUP_NICE`, `BACKUP_IONICE`) | The backup only gets CPU and disk that nothing else wants, so the bot stays responsive |
+| `nice 10` and the lowest best-effort I/O priority (`BACKUP_NICE`, `BACKUP_IONICE`) | The backup yields to the bot without being starved. Higher niceness is counter-productive: at 19 the process is weighted 15 against 1024 for a normal-priority one, so it loses ~70x on a contended CPU |
 | Memory and CPU caps in `docker-compose.yml` | If a backup no longer fits, it is OOM-killed inside its own cgroup instead of taking the host down |
 | Batched retention deletes, or none at all (`BACKUP_RETENTION`) | One `DeleteObjects` call instead of one request per object; `BACKUP_RETENTION=0` hands expiry to an S3 lifecycle rule, which costs the host nothing |
 | Hard timeout (`BACKUP_TIMEOUT`) | A stalled upload fails and is retried instead of hanging forever |
 
-For a ~0.5 GB database this typically means around 50-100 MiB uploaded per run and a peak RSS well under 100 MiB.
+For a ~0.5 GB database this typically means around 50-100 MiB uploaded per run, a peak RSS well under 100 MiB, and one pass over the data rather than three — which on a slow disk is the difference between a backup that finishes in under a minute and one that appears to hang.
+
+Staging needs free space for the snapshot itself (never more than the database); the compressed copy only ever exists in memory, a chunk at a time.
 
 Tuning knobs live in `.env.backup`; the container's memory and CPU caps live in `docker-compose.yml`:
 
 ```yaml
-    cpus: 0.5
-    mem_limit: 192m
-    memswap_limit: 192m
+    cpus: 0.75
+    mem_limit: 320m
+    memswap_limit: 320m
 ```
+
+Page cache counts towards `mem_limit`, so a limit that is too tight forces the cgroup into constant reclaim while the snapshot streams through it, which is slower than having no limit at all. 320 MiB leaves room on a 512 MiB host; do not drop it much below that.
 
 ### Troubleshooting Backups
 

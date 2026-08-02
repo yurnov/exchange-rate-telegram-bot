@@ -20,9 +20,11 @@ services:
     # Resource caps sized for a 512 MiB / 1 shared vCPU host: a backup can no longer
     # take the whole box down with it. If it does not fit, it is OOM-killed inside its
     # own cgroup while the bot and sshd keep running. Raise these on larger hosts.
-    cpus: 0.5
-    mem_limit: 192m
-    memswap_limit: 192m
+    # Page cache counts towards mem_limit, so leave room to stream the snapshot
+    # through without forcing the cgroup into constant reclaim.
+    cpus: 0.75
+    mem_limit: 320m
+    memswap_limit: 320m
     pids_limit: 64
     profiles:
       - backup

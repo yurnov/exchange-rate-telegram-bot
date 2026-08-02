@@ -9,12 +9,13 @@ S3-compatible object storage. It can run in two modes:
 - Scheduled mode (default): Runs continuously, creating backups at a configurable interval
 - One-shot mode: Creates a single backup and exits (for cron jobs / Kubernetes Jobs)
 
-The implementation is tuned for small hosts (512 MiB RAM, one shared vCPU): the
-snapshot is staged on a real filesystem instead of the container layer, the page
-cache is dropped as the file is written so the kernel never has to flush hundreds
-of megabytes of dirty pages at once, the upload uses a single transfer thread with
-bounded buffers, and the process lowers its own CPU and I/O priority so it can
-never starve the bot (or sshd) on the same box.
+The implementation is tuned for small hosts (512 MiB RAM, one shared vCPU) where
+disk throughput is the binding constraint: the snapshot is read exactly once and
+gzipped straight into the upload, it is staged on a real filesystem instead of the
+container layer, the page cache is released as the data is processed so the kernel
+never has to flush hundreds of megabytes of dirty pages at once, the upload uses a
+single transfer thread with bounded buffers, and the process runs at a reduced CPU
+and I/O priority so it yields to the bot (and to sshd) on the same box.
 
 Usage:
     python backup.py                  # Scheduled mode (default)
@@ -42,8 +43,8 @@ Resource-tuning environment variables:
     BACKUP_METHOD         - "auto" (default), "vacuum" or "copy"
     BACKUP_COMPRESS       - Gzip the snapshot before upload (default: true)
     BACKUP_COMPRESS_LEVEL - Gzip level 1-9, low is cheap on CPU (default: 1)
-    BACKUP_NICE           - Niceness increment for this process, 0-19 (default: 19)
-    BACKUP_IONICE         - Request the idle I/O scheduling class (default: true)
+    BACKUP_NICE           - Niceness increment for this process, 0-19 (default: 10)
+    BACKUP_IONICE         - Request the lowest best-effort I/O priority (default: true)
     BACKUP_DROP_CACHE     - Drop page cache for files read/written (default: true)
     BACKUP_TIMEOUT        - Abort a backup cycle after N seconds, 0 disables (default: 3600)
     BACKUP_UPLOAD_CONCURRENCY   - Concurrent multipart upload threads (default: 1)
@@ -54,7 +55,6 @@ Resource-tuning environment variables:
 """
 
 import ctypes
-import gzip
 import json
 import logging
 import os
@@ -63,8 +63,9 @@ import shutil
 import signal
 import sqlite3
 import sys
-import time
 import tempfile
+import time
+import zlib
 from datetime import datetime, timezone
 
 try:
@@ -90,12 +91,14 @@ FLUSH_INTERVAL = 64 * 1024 * 1024
 
 MIB = 1024 * 1024
 
-# ioprio_set(2) syscall numbers, per architecture. Used to put the backup in the
-# idle I/O class so it only gets disk bandwidth nobody else wants.
+# ioprio_set(2) syscall numbers, per architecture. Used to put the backup at the
+# lowest best-effort I/O priority. The idle class is deliberately not used: it only
+# runs when the disk is otherwise idle, which on a busy host means never.
 IOPRIO_SET_SYSCALL = {'x86_64': 251, 'aarch64': 30, 'armv7l': 314, 'i686': 289}
 IOPRIO_WHO_PROCESS = 1
-IOPRIO_CLASS_IDLE = 3
+IOPRIO_CLASS_BEST_EFFORT = 2
 IOPRIO_CLASS_SHIFT = 13
+IOPRIO_LOWEST_BEST_EFFORT = 7
 
 
 class BackupTimeout(Exception):
@@ -158,9 +161,14 @@ def lower_process_priority(nice_increment: int, use_ionice: bool) -> None:
     On a single shared vCPU this is what keeps the bot responsive (and the host
     reachable over ssh) while a multi-hundred-megabyte snapshot is being copied.
 
+    Note that both are a balance, not a maximum: niceness 19 weights the process at
+    15 against 1024 for a normal-priority one, so it loses roughly 70x on a contended
+    CPU and a backup that should take seconds takes minutes. The default of 10 yields
+    to the bot while still making steady progress.
+
     Args:
         nice_increment: Niceness to add, 0-19. Higher means lower priority.
-        use_ionice: Whether to request the idle I/O scheduling class.
+        use_ionice: Whether to request the lowest best-effort I/O priority.
     """
     if nice_increment > 0:
         try:
@@ -178,11 +186,11 @@ def lower_process_priority(nice_increment: int, use_ionice: bool) -> None:
 
     try:
         libc = ctypes.CDLL(None, use_errno=True)
-        priority = IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT
+        priority = (IOPRIO_CLASS_BEST_EFFORT << IOPRIO_CLASS_SHIFT) | IOPRIO_LOWEST_BEST_EFFORT
         if libc.syscall(syscall_number, IOPRIO_WHO_PROCESS, 0, priority) != 0:
             logger.debug(f"ioprio_set failed with errno {ctypes.get_errno()}, keeping default I/O priority")
         else:
-            logger.debug("I/O priority set to idle class")
+            logger.debug("I/O priority set to the lowest best-effort level")
     except (OSError, AttributeError) as e:
         logger.debug(f"Could not set I/O priority: {str(e)}")
 
@@ -312,51 +320,70 @@ def _drop_source_cache(db_path: str, drop_cache: bool) -> None:
         os.close(fd)
 
 
-def compress_file(source_path: str, dest_path: str, level: int, drop_cache: bool) -> bool:
+class GzipReader:
     """
-    Gzip a file in bounded-size chunks.
+    A read-only file object that gzips another file as it is read.
 
+    This exists so the snapshot is compressed *during* the upload rather than in a
+    separate pass. Writing a compressed copy to disk and reading it back again costs
+    two extra passes over the data, which on a slow disk dominates the whole backup:
+    at 20 MB/s a 0.5 GB database spends minutes on I/O that buys nothing.
+
+    Only read() is implemented, which is all boto3 needs for a non-seekable upload.
     Level 1 is deliberate: SQLite pages compress well even at the cheapest setting,
-    and on a shared vCPU the CPU saved is worth far more than the extra few percent
-    of ratio. Compressing also shortens the upload, which is itself CPU work (TLS).
-
-    Args:
-        source_path: File to compress
-        dest_path: Destination .gz path
-        level: Gzip compression level, 1-9
-        drop_cache: Whether to release the page cache while writing
-
-    Returns:
-        True if compression succeeded, False otherwise
+    and on a shared vCPU the CPU saved is worth more than the extra few percent of
+    ratio. Compressing also shortens the upload, which is itself CPU work (TLS).
     """
-    try:
-        written_since_flush = 0
-        with open(source_path, 'rb') as src, open(dest_path, 'wb') as raw_dst:
-            with gzip.GzipFile(fileobj=raw_dst, mode='wb', compresslevel=level) as dst:
-                while True:
-                    chunk = src.read(COPY_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
-                    written_since_flush += len(chunk)
-                    if written_since_flush >= FLUSH_INTERVAL:
-                        dst.flush()
-                        raw_dst.flush()
-                        _flush_and_drop(raw_dst.fileno(), drop_cache)
-                        _drop_cache(src.fileno(), drop_cache)
-                        written_since_flush = 0
-            raw_dst.flush()
-            _flush_and_drop(raw_dst.fileno(), drop_cache)
-            _drop_cache(src.fileno(), drop_cache)
-        return True
-    except OSError as e:
-        logger.error(f"Error compressing snapshot: {str(e)}")
-        return False
+
+    def __init__(self, source_path: str, level: int, drop_cache: bool):
+        self._file = open(source_path, 'rb')  # pylint: disable=consider-using-with
+        self._compressor = zlib.compressobj(level, zlib.DEFLATED, 16 + zlib.MAX_WBITS)
+        self._buffer = b''
+        self._finished = False
+        self._drop_cache = drop_cache
+        self._read_since_drop = 0
+        self.bytes_in = 0
+        self.bytes_out = 0
+
+    def read(self, size: int = -1) -> bytes:
+        """Return up to `size` compressed bytes, compressing more of the source as needed."""
+        while not self._finished and (size < 0 or len(self._buffer) < size):
+            chunk = self._file.read(COPY_CHUNK_SIZE)
+            if chunk:
+                self.bytes_in += len(chunk)
+                self._read_since_drop += len(chunk)
+                self._buffer += self._compressor.compress(chunk)
+                # Hand back the page cache for data already compressed. No fsync is
+                # involved: nothing is written to disk on this path at all.
+                if self._read_since_drop >= FLUSH_INTERVAL:
+                    _drop_cache(self._file.fileno(), self._drop_cache)
+                    self._read_since_drop = 0
+            else:
+                self._buffer += self._compressor.flush()
+                self._finished = True
+
+        if size < 0 or size >= len(self._buffer):
+            data, self._buffer = self._buffer, b''
+        else:
+            data, self._buffer = self._buffer[:size], self._buffer[size:]
+        self.bytes_out += len(data)
+        return data
+
+    def close(self) -> None:
+        """Close the underlying file and release its page cache."""
+        _drop_cache(self._file.fileno(), self._drop_cache)
+        self._file.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
 
-def upload_to_s3(file_path: str, bucket: str, key: str, s3_client, transfer_config, extra_args=None) -> bool:
+def upload_to_s3(file_path: str, bucket: str, key: str, s3_client, transfer_config, config: dict) -> int:
     """
-    Upload a file to S3-compatible storage.
+    Upload a file to S3-compatible storage, gzipping it on the fly when enabled.
 
     Args:
         file_path: Local path to the file to upload
@@ -364,21 +391,27 @@ def upload_to_s3(file_path: str, bucket: str, key: str, s3_client, transfer_conf
         key: S3 object key
         s3_client: Configured boto3 S3 client
         transfer_config: boto3 TransferConfig bounding threads and buffer sizes
-        extra_args: Optional dict of extra S3 arguments (storage class, content type)
+        config: Resolved configuration dictionary
 
     Returns:
-        True if upload was successful, False otherwise
+        Number of bytes uploaded, or -1 on failure
     """
     try:
-        s3_client.upload_file(file_path, bucket, key, ExtraArgs=extra_args, Config=transfer_config)
+        if not config['compress']:
+            s3_client.upload_file(file_path, bucket, key, ExtraArgs=config['extra_args'], Config=transfer_config)
+            uploaded = os.path.getsize(file_path)
+        else:
+            with GzipReader(file_path, config['compress_level'], config['drop_cache']) as stream:
+                s3_client.upload_fileobj(stream, bucket, key, ExtraArgs=config['extra_args'], Config=transfer_config)
+                uploaded = stream.bytes_out
         logger.info(f"Uploaded backup to s3://{bucket}/{key}")
-        return True
+        return uploaded
     except ClientError as e:
         logger.error(f"S3 upload error: {str(e)}")
-        return False
+        return -1
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Unexpected error uploading to S3: {str(e)}")
-        return False
+        return -1
 
 
 def cleanup_old_backups(bucket: str, prefix: str, retention: int, s3_client) -> None:
@@ -575,7 +608,6 @@ def run_backup(config: dict, s3_client, transfer_config) -> bool:
     # directory rather than using a pre-created NamedTemporaryFile.
     work_dir = tempfile.mkdtemp(prefix='xratebot-backup-', dir=config['tmpdir'] or None)
     snapshot_path = os.path.join(work_dir, 'snapshot.db')
-    upload_path = snapshot_path
 
     if config['timeout'] > 0:
         signal.alarm(config['timeout'])
@@ -597,36 +629,21 @@ def run_backup(config: dict, s3_client, transfer_config) -> bool:
         status['snapshot_bytes'] = snapshot_size
         status['snapshot_seconds'] = round(time.monotonic() - phase_start, 1)
 
-        if config['compress']:
-            phase_start = time.monotonic()
-            status['phase'] = 'compress'
-            upload_path = f"{snapshot_path}.gz"
-            if not compress_file(snapshot_path, upload_path, config['compress_level'], config['drop_cache']):
-                return False
-            # Free the uncompressed copy immediately: on a small disk the two files
-            # together are the peak footprint of the whole cycle.
-            os.unlink(snapshot_path)
-            compressed_size = os.path.getsize(upload_path)
-            ratio = snapshot_size / compressed_size if compressed_size else 0
-            logger.info(
-                f"Snapshot compressed: {_human(compressed_size)} ({ratio:.1f}x) "
-                f"in {time.monotonic() - phase_start:.1f}s at level {config['compress_level']}"
-            )
-            status['compressed_bytes'] = compressed_size
-            status['compress_seconds'] = round(time.monotonic() - phase_start, 1)
-
+        # Compression happens inside the upload, so the snapshot is read exactly once
+        # and no compressed copy is ever written to disk.
         phase_start = time.monotonic()
         status['phase'] = 'upload'
-        if not upload_to_s3(
-            upload_path, config['s3_bucket'], backup_key, s3_client, transfer_config, config['extra_args']
-        ):
+        upload_size = upload_to_s3(snapshot_path, config['s3_bucket'], backup_key, s3_client, transfer_config, config)
+        if upload_size < 0:
             return False
-        upload_size = os.path.getsize(upload_path)
+        elapsed = max(time.monotonic() - phase_start, 0.001)
+        ratio = f", {snapshot_size / upload_size:.1f}x smaller" if config['compress'] and upload_size else ""
         logger.info(
-            f"Upload finished: {_human(upload_size)} in {time.monotonic() - phase_start:.1f}s "
-            f"({_human(int(upload_size / max(time.monotonic() - phase_start, 0.001)))}/s)"
+            f"Upload finished: {_human(upload_size)} in {elapsed:.1f}s "
+            f"({_human(int(upload_size / elapsed))}/s{ratio})"
         )
-        status['upload_seconds'] = round(time.monotonic() - phase_start, 1)
+        status['uploaded_bytes'] = upload_size
+        status['upload_seconds'] = round(elapsed, 1)
 
         status['phase'] = 'cleanup'
         cleanup_old_backups(config['s3_bucket'], config['s3_prefix'], config['retention'], s3_client)
@@ -691,7 +708,7 @@ def load_config() -> dict:
         'method': os.getenv('BACKUP_METHOD', 'auto').strip().lower(),
         'compress': _env_bool('BACKUP_COMPRESS', True),
         'compress_level': _env_int('BACKUP_COMPRESS_LEVEL', 1, minimum=1, maximum=9),
-        'nice': _env_int('BACKUP_NICE', 19, minimum=0, maximum=19),
+        'nice': _env_int('BACKUP_NICE', 10, minimum=0, maximum=19),
         'ionice': _env_bool('BACKUP_IONICE', True),
         'drop_cache': _env_bool('BACKUP_DROP_CACHE', True),
         'timeout': _env_int('BACKUP_TIMEOUT', 3600, minimum=0),
@@ -768,8 +785,6 @@ def main():
     if config['timeout'] > 0:
         signal.signal(signal.SIGALRM, _handle_timeout)
 
-    lower_process_priority(config['nice'], config['ionice'])
-
     logger.info(
         f"Backup configuration: db_path={config['db_path']}, bucket={config['s3_bucket']}, prefix={config['s3_prefix']}"
     )
@@ -800,6 +815,11 @@ def main():
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.error(f"Error creating S3 client: {str(e)}")
         sys.exit(1)
+
+    # Lower priority only once startup is done. Building the S3 client parses several
+    # megabytes of bundled JSON models: a fixed ~1s of CPU that has no bearing on host
+    # load, but which takes minutes if it runs at the lowest priority on a busy vCPU.
+    lower_process_priority(config['nice'], config['ionice'])
 
     if config['mode'] == 'once':
         # One-shot mode: run single backup and exit
