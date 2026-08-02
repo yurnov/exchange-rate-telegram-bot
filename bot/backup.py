@@ -41,7 +41,7 @@ Optional environment variables:
 Resource-tuning environment variables:
     BACKUP_TMPDIR         - Directory for staging the snapshot (default: system temp)
     BACKUP_METHOD         - "auto" (default), "vacuum" or "copy"
-    BACKUP_COMPRESS       - Gzip the snapshot before upload (default: true)
+    BACKUP_COMPRESS       - Gzip the snapshot while uploading (default: true)
     BACKUP_COMPRESS_LEVEL - Gzip level 1-9, low is cheap on CPU (default: 1)
     BACKUP_NICE           - Niceness increment for this process, 0-19 (default: 10)
     BACKUP_IONICE         - Request the lowest best-effort I/O priority (default: true)
