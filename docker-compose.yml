@@ -7,8 +7,23 @@ services:
       - bot
     volumes:
       - ./data:/bot/data:ro
+      # Staging area for the snapshot. A named volume keeps the multi-hundred-megabyte
+      # temporary file on a real filesystem instead of the container layer, and keeps
+      # the status/log files readable after the container exits.
+      - backup-work:/backup/work
+    environment:
+      BACKUP_TMPDIR: /backup/work
+      BACKUP_STATUS_FILE: /backup/work/last_backup.json
+      BACKUP_LOG_FILE: /backup/work/backup.log
     env_file: .env.backup
     restart: unless-stopped
+    # Resource caps sized for a 512 MiB / 1 shared vCPU host: a backup can no longer
+    # take the whole box down with it. If it does not fit, it is OOM-killed inside its
+    # own cgroup while the bot and sshd keep running. Raise these on larger hosts.
+    cpus: 0.5
+    mem_limit: 192m
+    memswap_limit: 192m
+    pids_limit: 64
     profiles:
       - backup
   bot:
@@ -18,3 +33,5 @@ services:
       - ./data:/bot/data
     env_file: .env
     restart: unless-stopped
+volumes:
+  backup-work: {}
