@@ -7,9 +7,9 @@
 Backup sidecar tuned for low-resource hosts:
 - Snapshots are taken with `VACUUM INTO` (smaller output, not restarted by concurrent writes) and staged on a mounted volume instead of the container layer
 - Page cache is flushed and released while writing, so a large snapshot no longer stalls the whole host in writeback
-- Snapshots are gzipped (level 1 by default) before upload
+- Snapshots are gzipped (level 1 by default) directly into the upload stream, so the data is read once and no compressed copy is written to disk
 - Uploads use a single transfer thread with bounded buffers instead of boto3's ten concurrent parts
-- The process runs at `nice 19` in the idle I/O class, and the container has memory, CPU and PID caps
+- The process runs at `nice 10` and the lowest best-effort I/O priority, and the container has memory, CPU and PID caps
 - Old backups are deleted in batches, or left to an S3 lifecycle rule with `BACKUP_RETENTION=0`
 - Added per-phase timings, a JSON status file, an optional log file, a hard timeout and clean `SIGTERM` handling
 
