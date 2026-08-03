@@ -77,14 +77,29 @@ id | timestamp           | api_timestamp | source   | currency_code_a | currency
 
 ### Indexes
 
-The following indexes are created for efficient queries:
+The only index on `exchange_rates` is the implicit one backing the `UNIQUE(source,
+currency_code_a, currency_code_b, api_timestamp)` constraint, which serves the
+`INSERT OR IGNORE` deduplication.
+
+In production the table is write-only — the bot answers users from the live API and
+the chart builder reads the CSV — so no secondary indexes are maintained. Five were
+created historically (`idx_rates_timestamp`, `idx_rates_api_timestamp`,
+`idx_rates_currency_pair`, `idx_rates_source`, `idx_rates_currency_a`); measured
+with `dbstat` they held roughly two thirds of the database file and made every
+insert update seven B-trees instead of two. Existing databases can drop them and
+reclaim the space with a one-shot migration:
+
+```bash
+# Stop the bot first: the script refuses to run while the database is locked,
+# and the final VACUUM would block the bot's inserts anyway.
+python bot/scripts/drop_unused_indexes.py data/exchange_rates.db
+```
+
+For the ad-hoc analysis queries below, create the index you need on a **copy** of
+the database (e.g. a restored backup), where it costs the production host nothing:
 
 ```sql
-CREATE INDEX idx_rates_timestamp ON exchange_rates(timestamp);
-CREATE INDEX idx_rates_api_timestamp ON exchange_rates(api_timestamp);
 CREATE INDEX idx_rates_currency_pair ON exchange_rates(currency_code_a, currency_code_b, api_timestamp);
-CREATE INDEX idx_rates_source ON exchange_rates(source, api_timestamp);
-CREATE INDEX idx_rates_currency_a ON exchange_rates(currency_code_a, api_timestamp);
 ```
 
 ## Query Examples
@@ -505,7 +520,7 @@ conn.close()
 
 ## Performance Tips
 
-1. **Use indexes**: All common query patterns are already indexed
+1. **Use indexes**: Production carries no secondary indexes (see [Indexes](#indexes)); for analysis work, create the index your query needs on a copy of the database
 2. **Batch operations**: When inserting multiple rates, use transactions
 3. **Date filtering**: Use Unix timestamps for date comparisons (faster than datetime functions)
 4. **WAL mode**: Enabled by default for better concurrent read/write performance
