@@ -26,6 +26,10 @@ services:
     mem_limit: 320m
     memswap_limit: 320m
     pids_limit: 64
+    # If the *host* (not the cgroup) runs out of memory mid-backup, prefer killing
+    # the backup over the bot or sshd. A lost backup cycle retries; a lost bot drops
+    # user traffic.
+    oom_score_adj: 500
     profiles:
       - backup
   bot:
@@ -35,5 +39,9 @@ services:
       - ./data:/bot/data
     env_file: .env
     restart: unless-stopped
+    # Leak guard, not a working-set budget: the bot needs well under 100 MiB, so a
+    # runaway process hits its own cgroup limit (and restarts) instead of dragging
+    # the whole 512 MiB host into the OOM killer.
+    mem_limit: 192m
 volumes:
   backup-work: {}
