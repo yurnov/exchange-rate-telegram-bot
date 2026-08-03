@@ -213,16 +213,13 @@ class ExchangeRateDatabase:
                 )
             """)
 
-            # Create indexes for efficient queries
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rates_timestamp ON exchange_rates(timestamp)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rates_api_timestamp ON exchange_rates(api_timestamp)")
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_rates_currency_pair ON exchange_rates(currency_code_a, currency_code_b, api_timestamp)"
-            )
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rates_source ON exchange_rates(source, api_timestamp)")
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_rates_currency_a ON exchange_rates(currency_code_a, api_timestamp)"
-            )
+            # No secondary indexes on exchange_rates: the bot only ever inserts into
+            # this table (deduplication is served by the UNIQUE constraint's implicit
+            # index), while the five indexes previously created here were never read
+            # and accounted for roughly two thirds of the database file. Ad-hoc
+            # analysis queries can create the index they need on a copy of the data.
+            # Existing deployments: run bot/scripts/drop_unused_indexes.py once to
+            # remove the old indexes and shrink the file.
 
             self.conn.commit()
             logger.info("Database schema initialized successfully")

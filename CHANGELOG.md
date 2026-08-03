@@ -13,6 +13,12 @@ Backup sidecar tuned for low-resource hosts:
 - Old backups are deleted in batches, or left to an S3 lifecycle rule with `BACKUP_RETENTION=0`
 - Added per-phase timings, a JSON status file, an optional log file, a hard timeout and clean `SIGTERM` handling
 
+Database size and small-host stability:
+- The five secondary indexes on `exchange_rates` are no longer created: the table is write-only in production, and measured with `dbstat` the indexes held roughly two thirds of the database file while making every insert update seven B-trees instead of two
+- New one-shot migration `bot/scripts/drop_unused_indexes.py` drops the old indexes on existing databases, compacts the file with `VACUUM` and activates `auto_vacuum=FULL` (a silent no-op on pre-existing databases until the next full vacuum)
+- The backup container now marks itself as the preferred host-OOM victim (`oom_score_adj: 500`) and the bot gets a 192 MiB leak-guard memory limit
+- New `docs/SMALL_HOST_RUNBOOK.md` walks through stabilising a 512 MiB droplet: adding swap, removing the maintenance jobs the OOM killer was cycling through (`fwupd`, `appstream`, `update-notifier`), and running the index migration
+
 ## v0.9.0
 
 [Added support of Turkish lira](https://github.com/yurnov/exchange-rate-telegram-bot/pull/46)
